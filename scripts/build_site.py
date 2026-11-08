@@ -7,7 +7,10 @@ ROOT = Path(__file__).resolve().parents[1]
 SITE = ROOT / 'site'
 ASSETS = SITE / 'assets'
 ASSETS.mkdir(parents=True, exist_ok=True)
-for name in ('overview', 'overview-dark', 'history', 'smart-actions', 'translation', 'image-text', 'qrcode', 'settings'):
+# The site ships only the current showcase images.
+for obsolete in ('overview', 'overview-dark', 'smart-actions', 'translation', 'image-text', 'settings'):
+    (ASSETS / f'{obsolete}.png').unlink(missing_ok=True)
+for name in ('history', 'qrcode', 'hero-ocr-light', 'hero-ocr-dark', 'hero-json-light', 'hero-json-dark', 'hero-translation-light', 'hero-translation-dark'):
     shutil.copy2(ROOT / 'assets' / 'screenshots' / f'{name}.png', ASSETS / f'{name}.png')
 shutil.copy2(ROOT / 'TinyCopy/Assets.xcassets/AppIcon.appiconset/icon_128x128@2x.png', ASSETS / 'icon.png')
 shutil.copy2(ROOT / 'LICENSE', SITE / 'LICENSE')
