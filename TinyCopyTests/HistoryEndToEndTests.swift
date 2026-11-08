@@ -92,6 +92,30 @@ final class HistoryEndToEndTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: unknownContent.path), "content of unreadable entries is not deleted")
         relaunched.writeToPasteboard(kept.id)
         XCTAssertEqual(pasteboard.string(forType: .string), "kept")
+
+        // Saving writes the unknown entry back, so a later launch does not take its content for an orphan.
+        relaunched.flush()
+        let again = makeModel()
+        _ = again.store.content(for: kept.id)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: unknownContent.path), "unknown entries survive repeated saves")
+        let saved = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: root.appendingPathComponent("index.json"))) as? [[String: Any]])
+        XCTAssertTrue(saved.contains { $0["id"] as? String == unknown.uuidString && $0["kind"] as? String == "video" })
+    }
+
+    func testCorruptIndexIsBackedUpAndNoContentIsDeletedOnLaterLaunches() async throws {
+        let model = makeModel()
+        await copy(model, text: "before corruption")
+        model.flush()
+        let id = try XCTUnwrap(model.items.first).id
+        try Data("{not json".utf8).write(to: root.appendingPathComponent("index.json"))
+
+        let first = makeModel()
+        XCTAssertTrue(first.items.isEmpty)
+        first.flush()
+        let second = makeModel()
+        XCTAssertNotNil(second.store.content(for: id), "content stays while the unreadable index copy exists")
+        let names = try FileManager.default.contentsOfDirectory(atPath: root.path)
+        XCTAssertTrue(names.contains { $0.hasPrefix("index-unreadable-") })
     }
 
     func testRichTextKeepsItsFormatsAndCanPastePlain() async throws {

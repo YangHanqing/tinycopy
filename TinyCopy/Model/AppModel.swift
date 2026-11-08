@@ -43,7 +43,7 @@ final class AppModel {
         let loaded = store.loadIndex()
         items = loaded.items.sorted { $0.lastCopied > $1.lastCopied }
         items.forEach(reindex)
-        // After a partial read the unlisted files may belong to entries in the kept copy of the index.
+        // When the index could not be read, the unlisted files may belong to entries in its kept copy.
         if loaded.complete { store.removeOrphans(keeping: Set(items.map(\.id))) }
         if #available(macOS 15.0, *) {
             let engine = TranslationEngine()

@@ -29,26 +29,42 @@ final class HistoryStore: @unchecked Sendable {
 
     // MARK: Index
 
-    /// `complete` is false when the file existed but some or all of it could not be read. Then a
-    /// copy of it is kept, and the caller must not treat unlisted content files as orphans.
+    /// `complete` is false when the file existed but could not be read at all. Then a copy of it is
+    /// kept, and the caller must not treat unlisted content files as orphans.
     func loadIndex() -> (items: [ClipItem], complete: Bool) {
         guard FileManager.default.fileExists(atPath: indexURL.path) else { return ([], true) }
-        let decoded = (try? Data(contentsOf: indexURL)).flatMap { try? JSONDecoder.store.decode([Lossy].self, from: $0) }
-        let items = decoded?.compactMap(\.item) ?? []
-        guard let decoded, items.count == decoded.count else {
+        guard let data = try? Data(contentsOf: indexURL),
+              let entries = (try? JSONSerialization.jsonObject(with: data)) as? [Any] else {
             // Keep the unreadable file for inspection instead of losing it on the next save.
-            let backup = root.appendingPathComponent("index-unreadable-\(Int(Date().timeIntervalSince1970)).json")
+            let backup = root.appendingPathComponent("\(Self.backupPrefix)\(Int(Date().timeIntervalSince1970)).json")
             try? FileManager.default.copyItem(at: indexURL, to: backup)
-            return (items, false)
+            return ([], false)
+        }
+        var items: [ClipItem] = []
+        var kept: [Data] = []
+        var keptIDs: Set<UUID> = []
+        for entry in entries {
+            guard let raw = try? JSONSerialization.data(withJSONObject: entry) else { continue }
+            if let item = try? JSONDecoder.store.decode(ClipItem.self, from: raw) {
+                items.append(item)
+            } else {
+                // An entry from another version (an unknown kind, say) is written back untouched,
+                // so going back to that version finds it again with its content.
+                kept.append(raw)
+                if let id = (entry as? [String: Any])?["id"] as? String, let uuid = UUID(uuidString: id) { keptIDs.insert(uuid) }
+            }
+        }
+        queue.sync {
+            unreadableEntries = kept
+            unreadableIDs = keptIDs
         }
         return (items, true)
     }
 
-    /// One entry of the index; an entry this version cannot read is skipped, not fatal.
-    private struct Lossy: Decodable {
-        let item: ClipItem?
-        init(from decoder: Decoder) throws { item = try? ClipItem(from: decoder) }
-    }
+    private static let backupPrefix = "index-unreadable-"
+    /// Index entries this version cannot read, kept verbatim. Touched only on `queue`.
+    private var unreadableEntries: [Data] = []
+    private var unreadableIDs: Set<UUID> = []
 
     func saveIndex(_ items: [ClipItem]) {
         queue.async { self.writeIndex(items) }
@@ -60,7 +76,13 @@ final class HistoryStore: @unchecked Sendable {
     }
 
     private func writeIndex(_ items: [ClipItem]) {
-        guard let data = try? JSONEncoder.store.encode(items) else { return }
+        guard var data = try? JSONEncoder.store.encode(items) else { return }
+        if !unreadableEntries.isEmpty {
+            guard var entries = (try? JSONSerialization.jsonObject(with: data)) as? [Any] else { return }
+            entries += unreadableEntries.compactMap { try? JSONSerialization.jsonObject(with: $0) }
+            guard let merged = try? JSONSerialization.data(withJSONObject: entries) else { return }
+            data = merged
+        }
         try? data.write(to: indexURL, options: .atomic)
     }
 
@@ -97,9 +119,13 @@ final class HistoryStore: @unchecked Sendable {
         }
     }
 
-    /// Removes files that no item refers to (left by a crash between writes).
+    /// Removes files that no item refers to (left by a crash between writes). Skipped while a copy
+    /// of an unreadable index exists: its entries may still need these files.
     func removeOrphans(keeping ids: Set<UUID>) {
         queue.async {
+            let names = (try? FileManager.default.contentsOfDirectory(atPath: self.root.path)) ?? []
+            guard !names.contains(where: { $0.hasPrefix(Self.backupPrefix) }) else { return }
+            let ids = ids.union(self.unreadableIDs)
             for dir in [self.contentDir, self.thumbDir] {
                 let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
                 for file in files {

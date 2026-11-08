@@ -235,7 +235,7 @@ struct HistoryList: View {
         }
         Divider()
         Button(item.pinned ? "取消收藏" : "收藏") { state.selectedID = item.id; state.togglePinSelected() }
-        Button("删除") { state.select(item.id); state.deleteSelected() }
+        Button("删除") { state.selectedID = item.id; state.deleteSelected() }
     }
 }
 
