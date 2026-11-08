@@ -1,0 +1,35 @@
+# Generated Xcode project (from project.yml) and local build output
+*.xcodeproj
+*.xcworkspace
+build/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+.swiftpm/
+
+# macOS
+.DS_Store
+
+# Local planning, design drafts and agent configuration
+/docs/
+/design/
+# AGENTS.md holds the agent guidance; CLAUDE.md only imports it (@AGENTS.md)
+AGENTS.md
+AGENTS.local.md
+CLAUDE.md
+CLAUDE.local.md
+/.agents/
+/.claude/
+/.codex/
+/TODO.csv
+
+# Signing secrets and local release settings: never commit
+/scripts/release.local.env
+*.p12
+*.p8
+*.cer
+*.provisionprofile
+*.mobileprovision
+*.keychain-db
+.env
+.env.*

@@ -1,0 +1,65 @@
+name: TinyCopy
+options:
+  bundleIdPrefix: cn.hqyang
+  deploymentTarget:
+    macOS: "14.0"
+  developmentRegion: zh-Hans
+  createIntermediateGroups: true
+settings:
+  base:
+    # The patch number goes up with each feature.
+    MARKETING_VERSION: "0.2.0"
+    # yyyyMMddHHmm. scripts/install.sh and scripts/release.sh stamp the minute they build.
+    CURRENT_PROJECT_VERSION: "202611080000"
+    SWIFT_VERSION: "5.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    # Universal: Apple silicon and Intel in one app.
+    ARCHS: "$(ARCHS_STANDARD)"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    ENABLE_HARDENED_RUNTIME: YES
+    # Ad hoc by default; the scripts pass the real identity on the command line.
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGN_STYLE: Manual
+  configs:
+    Debug:
+      ONLY_ACTIVE_ARCH: YES
+    Release:
+      CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
+targets:
+  TinyCopy:
+    type: application
+    platform: macOS
+    sources:
+      - path: TinyCopy
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: cn.hqyang.TinyCopy
+        PRODUCT_NAME: TinyCopy
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: TinyCopy/Info.plist
+        CODE_SIGN_ENTITLEMENTS: TinyCopy/TinyCopy.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+      configs:
+        # A separate identity (and data folder) lets the Debug build run beside the installed app.
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: cn.hqyang.TinyCopy.debug
+  TinyCopyTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: TinyCopyTests
+    dependencies:
+      - target: TinyCopy
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: cn.hqyang.TinyCopy.tests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_IDENTITY: "-"
+schemes:
+  TinyCopy:
+    build:
+      targets:
+        TinyCopy: all
+    test:
+      targets:
+        - TinyCopyTests
