@@ -35,6 +35,10 @@ private struct MenuContent: View {
         Divider()
         Button("设置…") { AppDelegate.openSettings() }
             .keyboardShortcut(",")
+        Button("显示诊断日志") {
+            try? FileManager.default.createDirectory(at: HangMonitor.logDirectory, withIntermediateDirectories: true)
+            NSWorkspace.shared.open(HangMonitor.logDirectory)
+        }
         if !Paster.isTrusted {
             Button("授予辅助功能权限…") {
                 Paster.requestTrust()
@@ -52,12 +56,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) static weak var shared: AppDelegate?
     private(set) var panel: PanelController?
     private var settingsWindow: NSWindow?
+    private var settingsCloseObserver: NSObjectProtocol?
 
     static var isTesting: Bool { ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Self.shared = self
         guard !Self.isTesting else { return }
+        HangMonitor.shared.start()
         NSApp.appearance = AppSettings.shared.appearance.nsAppearance
         let model = AppModel.shared
         model.startMonitoring()
@@ -125,7 +131,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             window.isReleasedWhenClosed = false
             window.center()
             settingsWindow = window
+            // Drop the window on close: a hidden SettingsView would keep its once-a-second status
+            // refresh (login item, accessibility) running on the main thread for the app's lifetime.
+            settingsCloseObserver = NotificationCenter.default.addObserver(
+                forName: NSWindow.willCloseNotification, object: window, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    if let observer = self.settingsCloseObserver { NotificationCenter.default.removeObserver(observer) }
+                    self.settingsCloseObserver = nil
+                    self.settingsWindow = nil
+                }
+            }
         }
+        HangMonitor.note("打开设置")
         NSApp.activate()
         settingsWindow?.makeKeyAndOrderFront(nil)
     }

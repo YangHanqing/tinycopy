@@ -78,6 +78,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     }
 
     func show() {
+        HangMonitor.note("打开面板")
         let front = NSWorkspace.shared.frontmostApplication
         previousApp = front?.processIdentifier == ProcessInfo.processInfo.processIdentifier ? nil : front
         applyingLayout = true
@@ -92,6 +93,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     }
 
     func hide() {
+        HangMonitor.note("关闭面板")
         state.cancelPending()
         saveLayout()
         removeKeyMonitor()

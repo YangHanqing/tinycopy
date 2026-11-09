@@ -58,6 +58,7 @@ final class PanelState {
     var selectedID: UUID? {
         didSet {
             if selectedID != oldValue {
+                HangMonitor.note("\(previewVisible ? "预览中切换" : "选中")记录：\(selected.map(HangMonitor.describe) ?? "无")")
                 waiting = nil
                 cancelQRGeneration()
                 previewChoice = .original
@@ -68,6 +69,7 @@ final class PanelState {
     var previewVisible = false {
         didSet {
             guard previewVisible != oldValue else { return }
+            HangMonitor.note(previewVisible ? "打开预览：\(selected.map(HangMonitor.describe) ?? "无选中")" : "收起预览")
             onPreviewVisibilityChanged?()
         }
     }
@@ -75,7 +77,13 @@ final class PanelState {
     @ObservationIgnored var onPreviewVisibilityChanged: (() -> Void)?
     /// Original content is always the starting point for a newly selected record.
     enum PreviewChoice: Hashable { case original, action(SmartActionKind) }
-    var previewChoice: PreviewChoice = .original { didSet { if previewChoice != oldValue { waiting = nil } } }
+    var previewChoice: PreviewChoice = .original {
+        didSet {
+            guard previewChoice != oldValue else { return }
+            waiting = nil
+            if case .action(let kind) = previewChoice { HangMonitor.note("选择处理：\(kind.rawValue)，\(selected.map(HangMonitor.describe) ?? "无")") }
+        }
+    }
     /// Bumped on every show so the search field takes focus again.
     var focusToken = 0
     var now = Date()
