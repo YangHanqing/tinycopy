@@ -207,10 +207,10 @@ struct ActionsCard: View {
         let long = excerpt.count > (compact ? 400 : 700) || excerpt.filter { $0 == "\n" }.count > (compact ? 6 : 12)
         return Group {
             if long {
-                ScrollView {
-                    textContent(excerpt, monospaced: monospaced)
-                }
-                .frame(height: compact ? 120 : 240)
+                // SwiftUI's selectable `Text` lays out the whole string on the main thread; on
+                // macOS 15 a 13 KB, 400-line note froze the panel for 14 s. TextKit lays out lazily.
+                LongTextView(text: excerpt, monospaced: monospaced)
+                    .frame(height: compact ? 120 : 240)
             } else {
                 textContent(excerpt, monospaced: monospaced)
             }
@@ -283,5 +283,44 @@ struct ActionsCard: View {
         guard !Task.isCancelled else { return }
         image = data.flatMap(NSImage.init(data:))
         imageLoaded = true
+    }
+}
+
+/// Read-only, selectable text backed by NSTextView, for content too long for SwiftUI `Text`.
+private struct LongTextView: NSViewRepresentable {
+    let text: String
+    let monospaced: Bool
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSTextView.scrollableTextView()
+        scrollView.drawsBackground = false
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.scrollerStyle = .overlay
+        if let textView = scrollView.documentView as? NSTextView {
+            textView.isEditable = false
+            textView.isSelectable = true
+            textView.isRichText = false
+            textView.drawsBackground = false
+            textView.textContainerInset = .zero
+            textView.textContainer?.lineFragmentPadding = 0
+            textView.textColor = .labelColor
+        }
+        update(scrollView)
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        update(scrollView)
+    }
+
+    private func update(_ scrollView: NSScrollView) {
+        guard let textView = scrollView.documentView as? NSTextView else { return }
+        let font = monospaced ? NSFont.monospacedSystemFont(ofSize: 14, weight: .regular) : NSFont.systemFont(ofSize: 14)
+        guard textView.string != text || textView.font != font else { return }
+        textView.string = text
+        textView.font = font
+        textView.textColor = .labelColor
+        textView.scroll(.zero)
     }
 }
