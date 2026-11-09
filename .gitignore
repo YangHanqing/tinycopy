@@ -21,7 +21,7 @@ CLAUDE.local.md
 /.agents/
 /.claude/
 /.codex/
-/TODO.csv
+/TODO.md
 
 # Signing secrets and local release settings: never commit
 /scripts/release.local.env
