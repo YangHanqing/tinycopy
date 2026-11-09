@@ -22,6 +22,8 @@ final class AppModel {
     @ObservationIgnored var onItemUpdated: ((UUID) -> Void)?
 
     @ObservationIgnored private var searchIndex: [UUID: SearchEntry] = [:]
+    /// Only the current query is retained; history edits invalidate both order and metadata.
+    @ObservationIgnored private var cachedSearch: (query: String, items: [ClipItem])?
     @ObservationIgnored private var lastChangeCount: Int
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private var captureChain: Task<Void, Never>?
@@ -192,6 +194,7 @@ final class AppModel {
     }
 
     private func didChange() {
+        cachedSearch = nil
         saveTask?.cancel()
         saveTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(300))
@@ -255,10 +258,13 @@ final class AppModel {
     /// Every term must match (case-insensitive). Ranking: text starting with a term, then a match at a
     /// word start, then anywhere, then only in OCR or decoded text; newer first within each rank.
     func search(_ query: String) -> [ClipItem] {
+        // Read observable history even on a cache hit so SwiftUI still tracks result changes.
+        let currentItems = items
+        if let cachedSearch, cachedSearch.query == query { return cachedSearch.items }
         let terms = query.lowercased().split(whereSeparator: \.isWhitespace).map(String.init)
-        guard !terms.isEmpty else { return items }
+        guard !terms.isEmpty else { return currentItems }
         var scored: [(score: Int, item: ClipItem)] = []
-        for item in items {
+        for item in currentItems {
             guard let entry = searchIndex[item.id] else { continue }
             var score = 0
             var matched = true
@@ -277,7 +283,9 @@ final class AppModel {
             }
             if matched { scored.append((score, item)) }
         }
-        return scored.sorted { $0.score != $1.score ? $0.score > $1.score : $0.item.lastCopied > $1.item.lastCopied }.map(\.item)
+        let results = scored.sorted { $0.score != $1.score ? $0.score > $1.score : $0.item.lastCopied > $1.item.lastCopied }.map(\.item)
+        cachedSearch = (query, results)
+        return results
     }
 
     // MARK: Thumbnails

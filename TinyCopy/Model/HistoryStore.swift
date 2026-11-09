@@ -33,7 +33,17 @@ final class HistoryStore: @unchecked Sendable {
     /// kept, and the caller must not treat unlisted content files as orphans.
     func loadIndex() -> (items: [ClipItem], complete: Bool) {
         guard FileManager.default.fileExists(atPath: indexURL.path) else { return ([], true) }
-        guard let data = try? Data(contentsOf: indexURL),
+        let data = try? Data(contentsOf: indexURL)
+        // Normal indexes need one decode, not a JSON object graph plus a re-encode/decode per item.
+        // Keep the tolerant per-entry path below for indexes containing unknown or damaged entries.
+        if let data, let items = try? JSONDecoder.store.decode([ClipItem].self, from: data) {
+            queue.sync {
+                unreadableEntries = []
+                unreadableIDs = []
+            }
+            return (items, true)
+        }
+        guard let data,
               let entries = (try? JSONSerialization.jsonObject(with: data)) as? [Any] else {
             // Keep the unreadable file for inspection instead of losing it on the next save.
             let backup = root.appendingPathComponent("\(Self.backupPrefix)\(Int(Date().timeIntervalSince1970)).json")

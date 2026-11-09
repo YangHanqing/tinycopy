@@ -8,7 +8,7 @@ options:
 settings:
   base:
     # The patch number goes up with each feature.
-    MARKETING_VERSION: "0.2.2"
+    MARKETING_VERSION: "0.2.3"
     # yyyyMMddHHmm. scripts/install.sh and scripts/release.sh stamp the minute they build.
     CURRENT_PROJECT_VERSION: "202611080000"
     SWIFT_VERSION: "5.0"

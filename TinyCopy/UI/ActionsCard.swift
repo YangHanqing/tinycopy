@@ -1,6 +1,5 @@
 import SwiftUI
 import ImageIO
-import UniformTypeIdentifiers
 
 /// Source and detected results stay visible together. Selection changes what Enter uses, not what is shown.
 struct ActionsCard: View {
@@ -203,8 +202,10 @@ struct ActionsCard: View {
     }
 
     private func textBlock(_ text: String, monospaced: Bool, compact: Bool = false) -> some View {
-        let excerpt = String(text.prefix(100_000))
-        let long = excerpt.count > (compact ? 400 : 700) || excerpt.filter { $0 == "\n" }.count > (compact ? 6 : 12)
+        // Bound every traversal to the preview, including the truncation check.
+        let end = text.index(text.startIndex, offsetBy: 100_000, limitedBy: text.endIndex) ?? text.endIndex
+        let excerpt = String(text[..<end])
+        let long = excerpt.count > (compact ? 400 : 700) || excerpt.lazy.filter { $0 == "\n" }.prefix(compact ? 7 : 13).count > (compact ? 6 : 12)
         return Group {
             if long {
                 // SwiftUI's selectable `Text` lays out the whole string on the main thread; on
@@ -214,7 +215,7 @@ struct ActionsCard: View {
             } else {
                 textContent(excerpt, monospaced: monospaced)
             }
-            if text.count > 100_000 {
+            if end != text.endIndex {
                 Text("仅预览前 100,000 个字符；复制和粘贴会保留完整内容。")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
@@ -266,7 +267,7 @@ struct ActionsCard: View {
         guard item.kind == .image else { return }
         let store = state.model.store
         let id = item.id
-        let data = await Task.detached(priority: .userInitiated) { () -> Data? in
+        let decoded = await Task.detached(priority: .userInitiated) { () -> CGImage? in
             guard let content = store.content(for: id),
                   let original = content.items.flatMap({ $0 }).first(where: { $0.type == NSPasteboard.PasteboardType.png.rawValue }),
                   let source = CGImageSourceCreateWithData(original.data as CFData, nil),
@@ -275,13 +276,10 @@ struct ActionsCard: View {
                     kCGImageSourceCreateThumbnailWithTransform: true,
                     kCGImageSourceThumbnailMaxPixelSize: 1800,
                   ] as CFDictionary) else { return nil }
-            let output = NSMutableData()
-            guard let destination = CGImageDestinationCreateWithData(output, UTType.png.identifier as CFString, 1, nil) else { return nil }
-            CGImageDestinationAddImage(destination, cgImage, nil)
-            return CGImageDestinationFinalize(destination) ? output as Data : nil
+            return cgImage
         }.value
         guard !Task.isCancelled else { return }
-        image = data.flatMap(NSImage.init(data:))
+        image = decoded.map { NSImage(cgImage: $0, size: .zero) }
         imageLoaded = true
     }
 }

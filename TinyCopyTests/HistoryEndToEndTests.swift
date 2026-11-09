@@ -39,8 +39,11 @@ final class HistoryEndToEndTests: XCTestCase {
         settings.historyLimit = 3
         let model = makeModel()
         await copy(model, text: "alpha")
+        XCTAssertEqual(model.search("a").map(\.text), ["alpha"])
         await copy(model, text: "beta")
+        XCTAssertEqual(model.search("a").map(\.text), ["alpha", "beta"])
         await copy(model, text: "alpha")
+        XCTAssertEqual(model.search("a").map(\.text), ["alpha", "beta"])
         XCTAssertEqual(model.items.map(\.text), ["alpha", "beta"], "a repeated copy reuses its entry and moves it to the top")
 
         model.togglePin(try XCTUnwrap(model.items.last).id) // beta
@@ -282,7 +285,9 @@ final class HistoryEndToEndTests: XCTestCase {
         model.togglePin(pinned.id)
         await copy(model, text: "Remove unpinned")
         let removed = try XCTUnwrap(model.items.first)
+        XCTAssertEqual(model.search("unpinned").map(\.id), [removed.id])
         model.clearHistory(keepPinned: true)
+        XCTAssertTrue(model.search("unpinned").isEmpty, "deleted content must also disappear from cached searches")
         model.flush()
         let relaunched = makeModel()
         XCTAssertEqual(relaunched.items.map(\.id), [pinned.id])
