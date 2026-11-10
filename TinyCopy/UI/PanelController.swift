@@ -90,6 +90,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         panel.invalidateShadow()
         // SwiftUI focus usually follows focusToken; this covers the first show.
         DispatchQueue.main.async { [weak self] in self?.focusSearchField() }
+        UpdateChecker.shared.checkIfDue()
     }
 
     func hide() {

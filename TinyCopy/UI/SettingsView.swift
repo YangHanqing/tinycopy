@@ -98,6 +98,17 @@ struct SettingsView: View {
                 note("需要在“系统设置 ▸ 通用 ▸ 登录项”中允许 TinyCopy。")
             }
             HStack {
+                Toggle("自动检查更新", isOn: $settings.checkForUpdates)
+                Spacer()
+                Button("立即检查") { UpdateChecker.shared.checkNow() }
+            }
+            if let release = UpdateChecker.shared.available {
+                LabeledContent("TinyCopy \(release.versionString) 已发布") {
+                    Button("下载") { UpdateChecker.shared.openAvailable() }
+                }
+            }
+            note("每 30 天向 GitHub 查询一次最新版本，只打开发布页面，不会自动下载或安装。")
+            HStack {
                 Text("打开 TinyCopy")
                 Spacer()
                 ShortcutRecorder(shortcut: $settings.shortcut)

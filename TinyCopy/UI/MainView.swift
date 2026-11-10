@@ -115,6 +115,12 @@ struct MainView: View {
             hint("↩", "粘贴")
             hint("esc", state.previewVisible ? "收起" : "关闭")
             Spacer(minLength: 0)
+            if let release = UpdateChecker.shared.available {
+                Button("新版本 \(release.versionString)") { UpdateChecker.shared.openAvailable() }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.accentColor)
+                    .accessibilityHint("在浏览器中打开发布页面")
+            }
             hint("⌘P", "收藏")
         }
         .font(.system(size: 12))

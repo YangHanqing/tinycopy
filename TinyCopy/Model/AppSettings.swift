@@ -74,6 +74,8 @@ final class AppSettings {
     var smartDetection: Bool { didSet { defaults.set(smartDetection, forKey: Keys.smartDetection) } }
     /// Skip content the source app marked concealed, transient or auto-generated.
     var ignoreConcealed: Bool { didSet { defaults.set(ignoreConcealed, forKey: Keys.ignoreConcealed) } }
+    /// Ask GitHub for a newer release once every 30 days (`UpdateChecker`).
+    var checkForUpdates: Bool { didSet { defaults.set(checkForUpdates, forKey: Keys.checkForUpdates) } }
     var shortcut: Shortcut {
         didSet { defaults.set(try? JSONEncoder().encode(shortcut), forKey: Keys.shortcut) }
     }
@@ -89,6 +91,7 @@ final class AppSettings {
         targetLanguage = defaults.string(forKey: Keys.targetLanguage) ?? LanguageTools.recommendedTarget()
         smartDetection = defaults.object(forKey: Keys.smartDetection) as? Bool ?? true
         ignoreConcealed = defaults.object(forKey: Keys.ignoreConcealed) as? Bool ?? true
+        checkForUpdates = defaults.object(forKey: Keys.checkForUpdates) as? Bool ?? true
         shortcut = defaults.data(forKey: Keys.shortcut).flatMap { try? JSONDecoder().decode(Shortcut.self, from: $0) } ?? .standard
     }
 
@@ -109,5 +112,6 @@ final class AppSettings {
         static let smartDetection = "smartDetection"
         static let ignoreConcealed = "ignoreConcealed"
         static let shortcut = "shortcut"
+        static let checkForUpdates = "checkForUpdates"
     }
 }

@@ -22,6 +22,9 @@ private struct MenuContent: View {
 
     var body: some View {
         Button("打开 TinyCopy（\(settings.shortcut.display)）") { AppDelegate.shared?.panel?.show() }
+        if let release = UpdateChecker.shared.available {
+            Button("下载新版本 \(release.versionString)…") { UpdateChecker.shared.openAvailable() }
+        }
         if let conflict = HotKeyCenter.shared.conflict {
             Button("⚠︎ 快捷键 \(conflict.display) 被其他应用占用…") { AppDelegate.openSettings() }
         }
@@ -35,6 +38,7 @@ private struct MenuContent: View {
         Divider()
         Button("设置…") { AppDelegate.openSettings() }
             .keyboardShortcut(",")
+        Button("检查更新…") { UpdateChecker.shared.checkNow() }
         Button("显示诊断日志") {
             try? FileManager.default.createDirectory(at: HangMonitor.logDirectory, withIntermediateDirectories: true)
             NSWorkspace.shared.open(HangMonitor.logDirectory)
@@ -76,6 +80,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if !AppSettings.shared.showMenuBarIcon { showSettings() }
         LoginItem.applyDefaultOnce()
+        UpdateChecker.shared.scheduleLaunchCheck()
         // `kill` (as scripts/install.sh sends) quits normally, so the index is flushed.
         signal(SIGTERM, SIG_IGN)
         let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
