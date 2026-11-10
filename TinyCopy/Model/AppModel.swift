@@ -66,10 +66,10 @@ final class AppModel {
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
         if settings.smartDetection {
-            items.filter { $0.kind == .image && $0.qrContents == nil }.forEach { requestQRDetection($0.id) }
+            items.filter { $0.isPicture && $0.qrContents == nil }.forEach { requestQRDetection($0.id) }
         }
         if settings.ocrMode == .automatic {
-            items.filter { $0.kind == .image && $0.ocrText == nil }.forEach { requestOCR($0.id) }
+            items.filter { $0.isPicture && $0.ocrText == nil }.forEach { requestOCR($0.id) }
         }
     }
 
@@ -100,10 +100,20 @@ final class AppModel {
             var item = items.remove(at: index)
             item.lastCopied = date
             item.isRich = clip.isRich
+            // The same path may now hold a different picture: read it again.
+            if item.imageFileURL != nil {
+                item.ocrText = nil
+                item.qrContents = nil
+            }
             items.insert(item, at: 0)
             // Keep the newest representations (the same text may arrive with other formatting).
             store.saveContent(processed.content, thumbnail: nil, for: item.id)
+            reindex(item)
             didChange()
+            if item.imageFileURL != nil {
+                requestQRDetection(item.id)
+                if settings.ocrMode == .automatic { requestOCR(item.id) }
+            }
             return
         }
         var item = ClipItem(id: UUID(), kind: clip.kind, text: clip.text, hash: processed.hash,
@@ -124,8 +134,8 @@ final class AppModel {
         reindex(item)
         evictOverLimit()
         didChange()
-        if item.kind == .image { requestQRDetection(item.id) }
-        if item.kind == .image, settings.ocrMode == .automatic { requestOCR(item.id) }
+        if item.isPicture { requestQRDetection(item.id) }
+        if item.isPicture, settings.ocrMode == .automatic { requestOCR(item.id) }
         if item.kind == .text, settings.translationMode == .automatic { requestTranslation(item.id, interactive: false) }
     }
 
@@ -313,9 +323,18 @@ final class AppModel {
                      translationTarget: translationAvailable && settings.translationMode != .off ? settings.targetLanguage : nil)
     }
 
+    /// The pixels that QR and text recognition read: a copied image file where it is now (through
+    /// ImageIO, so a large file is never loaded whole; a file that is gone has none), otherwise the
+    /// stored image.
+    nonisolated private static func imageSource(file: URL?, id: UUID, store: HistoryStore) -> CGImageSource? {
+        if let file { return CGImageSourceCreateWithURL(file as CFURL, nil) }
+        guard let png = store.content(for: id)?.items.first?.first?.data else { return nil }
+        return CGImageSourceCreateWithData(png as CFData, nil)
+    }
+
     /// QR recognition is separate from OCR, so it works even when text recognition is disabled.
     func requestQRDetection(_ id: UUID) {
-        guard settings.smartDetection, let item = item(id), item.kind == .image, item.qrContents == nil,
+        guard settings.smartDetection, let item = item(id), item.isPicture, item.qrContents == nil,
               !qrQueue.contains(id), !qrReading.contains(id) else { return }
         qrQueue.insert(id, at: 0)
         guard qrTask == nil else { return }
@@ -324,9 +343,10 @@ final class AppModel {
                 let next = self.qrQueue.removeFirst()
                 self.qrReading.insert(next)
                 let store = self.store
+                let file = self.item(next)?.imageFileURL
                 let contents = await Task.detached(priority: .utility) { () -> [String] in
-                    guard let png = store.content(for: next)?.items.first?.first?.data else { return [] }
-                    return QRCode.decode(png)
+                    guard let source = Self.imageSource(file: file, id: next, store: store) else { return [] }
+                    return QRCode.decode(source)
                 }.value
                 self.qrReading.remove(next)
                 self.update(next) { $0.qrContents = contents }
@@ -337,7 +357,7 @@ final class AppModel {
 
     /// One image at a time, newest request first, off the main thread.
     func requestOCR(_ id: UUID) {
-        guard settings.ocrMode != .off, let item = item(id), item.kind == .image, item.ocrText == nil,
+        guard settings.ocrMode != .off, let item = item(id), item.isPicture, item.ocrText == nil,
               !ocrQueue.contains(id), !ocrRunning.contains(id) else { return }
         ocrQueue.insert(id, at: 0)
         guard ocrTask == nil else { return }
@@ -346,9 +366,10 @@ final class AppModel {
                 let next = self.ocrQueue.removeFirst()
                 self.ocrRunning.insert(next)
                 let store = self.store
+                let file = self.item(next)?.imageFileURL
                 let text = await Task.detached(priority: .utility) { () -> String? in
-                    guard let png = store.content(for: next)?.items.first?.first?.data else { return nil }
-                    return await TextRecognizer.recognize(imageData: png)
+                    guard let source = Self.imageSource(file: file, id: next, store: store) else { return nil }
+                    return await TextRecognizer.recognize(source)
                 }.value
                 self.ocrRunning.remove(next)
                 self.update(next) { $0.ocrText = text ?? "" }

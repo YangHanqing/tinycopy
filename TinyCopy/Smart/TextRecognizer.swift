@@ -7,8 +7,8 @@ import Vision
 enum TextRecognizer {
     private static let maxPixels = 2600
 
-    static func recognize(imageData: Data) async -> String {
-        guard let image = downscaled(imageData) else { return "" }
+    static func recognize(_ source: CGImageSource) async -> String {
+        guard let image = downscaled(source) else { return "" }
         let languages = preferredLanguages()
         var lines: [String] = []
         if #available(macOS 15.0, *) {
@@ -53,8 +53,8 @@ enum TextRecognizer {
         return result
     }
 
-    private static func downscaled(_ data: Data) -> CGImage? {
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil), CGImageSourceGetCount(source) > 0 else { return nil }
+    private static func downscaled(_ source: CGImageSource) -> CGImage? {
+        guard CGImageSourceGetCount(source) > 0 else { return nil }
         let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
         let width = props?[kCGImagePropertyPixelWidth] as? Int ?? 0
         let height = props?[kCGImagePropertyPixelHeight] as? Int ?? 0

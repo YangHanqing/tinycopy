@@ -276,6 +276,10 @@ final class HistoryEndToEndTests: XCTestCase {
         let jpeg = try XCTUnwrap(NSBitmapImageRep(data: png)?.representation(using: .jpeg, properties: [:]))
         try jpeg.write(to: jpegURL)
         let imageID = try await copyFile(jpegURL)
+        XCTAssertTrue(model.item(imageID)?.ocrText?.lowercased().contains("file image") == true,
+                      "an image file's text is recognized: \(model.item(imageID)?.ocrText ?? "nil")")
+        XCTAssertEqual(model.search("file image").first?.id, imageID)
+        XCTAssertNotNil(panel.actions.first { $0.kind == .ocr }?.result)
         await eventually { panel.filePreview(for: try! XCTUnwrap(model.item(imageID)))?.image != nil }
         panel.choosePreview(.action(.fileImage))
         panel.activate(paste: true)
@@ -283,6 +287,14 @@ final class HistoryEndToEndTests: XCTestCase {
         let pasted = try XCTUnwrap(pastedImage)
         XCTAssertEqual(NSBitmapImageRep(data: pasted)?.pixelsWide, 900)
         XCTAssertTrue(pasted.starts(with: [0x89, 0x50, 0x4E, 0x47]), "pasted as PNG")
+
+        // A QR code saved as a file is read just like a screenshot of it.
+        let qrURL = root.appendingPathComponent("code.png")
+        try XCTUnwrap(QRCode.encode("https://example.com/qr-file")).write(to: qrURL)
+        let qrID = try await copyFile(qrURL)
+        XCTAssertEqual(model.item(qrID)?.qrContents, ["https://example.com/qr-file"])
+        XCTAssertEqual(panel.actions.first { $0.kind == .qrRead }?.result, "https://example.com/qr-file")
+        XCTAssertEqual(model.search("qr-file").first?.id, qrID)
 
         // Once a file is gone, only its path is left to paste.
         try FileManager.default.removeItem(at: textURL)

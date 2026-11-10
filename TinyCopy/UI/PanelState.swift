@@ -188,6 +188,9 @@ final class PanelState {
                 let unreadable = preview.single?.exists != true || preview.image == nil
                 let failed = filePNG.map { $0.id == item.id && $0.data == nil } ?? false
                 return unreadable || failed ? nil : action
+            case .ocr:
+                // Text already read stays offered; a file that is gone can no longer be read.
+                return action.result == nil && preview.single?.exists != true ? nil : action
             default:
                 return action
             }
@@ -276,7 +279,7 @@ final class PanelState {
     /// A missing translation language never opens a download prompt without an explicit click.
     func preparePreview() {
         guard previewVisible else { return }
-        if let item = selected, item.kind == .image { model.requestQRDetection(item.id) }
+        if let item = selected, item.isPicture { model.requestQRDetection(item.id) }
         loadFilePreview()
         primaryActions.forEach { requestPreview($0) }
     }

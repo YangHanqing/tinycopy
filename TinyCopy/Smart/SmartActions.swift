@@ -57,12 +57,7 @@ enum SmartActions {
         var list: [SmartAction] = []
         switch item.kind {
         case .image:
-            if context.smartDetection, let contents = item.qrContents, !contents.isEmpty {
-                list.append(SmartAction(kind: .qrRead, title: "提取二维码内容", symbol: "qrcode.viewfinder", result: contents.joined(separator: "\n")))
-            }
-            if context.ocrMode != .off, item.ocrText != "" {
-                list.append(SmartAction(kind: .ocr, title: "粘贴识别文字", symbol: "text.viewfinder", result: item.ocrText))
-            }
+            list = pictureActions(for: item, context: context)
         case .file:
             // The text and the image are filled in when the file is read (PanelState).
             if let url = item.fileURLs.first, item.fileURLs.count == 1 {
@@ -72,6 +67,7 @@ enum SmartActions {
                 default: break
                 }
             }
+            if item.isPicture { list += pictureActions(for: item, context: context) }
             list.append(SmartAction(kind: .filePaths, title: "粘贴文件路径", symbol: "folder", result: item.text))
         case .text:
             list = textActions(for: item, context: context)
@@ -148,19 +144,28 @@ enum SmartActions {
         return list
     }
 
+    /// What a screenshot and a copied image file both offer.
+    private static func pictureActions(for item: ClipItem, context: SmartContext) -> [SmartAction] {
+        var list: [SmartAction] = []
+        if context.smartDetection, let contents = item.qrContents, !contents.isEmpty {
+            list.append(SmartAction(kind: .qrRead, title: "提取二维码内容", symbol: "qrcode.viewfinder", result: contents.joined(separator: "\n")))
+        }
+        if context.ocrMode != .off, item.ocrText != "" {
+            list.append(SmartAction(kind: .ocr, title: "粘贴识别文字", symbol: "text.viewfinder", result: item.ocrText))
+        }
+        return list
+    }
+
     /// Text derived from the item that the list shows on its second line: what OCR read in an
     /// image, or the cached translation of text.
     static func derivedLine(for item: ClipItem, context: SmartContext) -> (label: String, text: String)? {
-        switch item.kind {
-        case .image:
+        if item.isPicture {
             if context.smartDetection, let contents = item.qrContents, !contents.isEmpty {
                 return ("二维码", contents.joined(separator: " · "))
             }
             if context.ocrMode != .off, let ocr = item.ocrText, !ocr.isEmpty { return ("文字", ocr) }
-        case .text:
-            if let target = context.translationTarget, let translated = item.translations[target] { return ("译", translated) }
-        case .file:
-            break
+        } else if item.kind == .text, let target = context.translationTarget, let translated = item.translations[target] {
+            return ("译", translated)
         }
         return nil
     }

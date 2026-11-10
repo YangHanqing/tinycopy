@@ -42,6 +42,16 @@ struct ClipItem: Codable, Identifiable, Equatable, Sendable {
     var fileURLs: [URL] {
         kind == .file ? text.split(separator: "\n").map { URL(fileURLWithPath: String($0)) } : []
     }
+
+    /// The single copied image file, which QR and text recognition read straight from disk.
+    var imageFileURL: URL? {
+        guard kind == .file, let url = fileURLs.first, fileURLs.count == 1,
+              FilePreviewLoader.kind(of: url) == .image else { return nil }
+        return url
+    }
+
+    /// Pasted pixels, or one copied image file: both get the same QR and text recognition.
+    var isPicture: Bool { kind == .image || imageFileURL != nil }
 }
 
 /// One pasteboard representation, kept in the order the source app offered it.

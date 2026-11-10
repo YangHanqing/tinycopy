@@ -70,12 +70,12 @@ struct SettingsView: View {
         .onChange(of: settings.historyLimit) { model.evictOverLimit() }
         .onChange(of: settings.smartDetection) {
             if settings.smartDetection {
-                model.items.filter { $0.kind == .image && $0.qrContents == nil }.forEach { model.requestQRDetection($0.id) }
+                model.items.filter { $0.isPicture && $0.qrContents == nil }.forEach { model.requestQRDetection($0.id) }
             }
         }
         .onChange(of: settings.ocrMode) {
             if settings.ocrMode == .automatic {
-                model.items.filter { $0.kind == .image && $0.ocrText == nil }.forEach { model.requestOCR($0.id) }
+                model.items.filter { $0.isPicture && $0.ocrText == nil }.forEach { model.requestOCR($0.id) }
             }
         }
         .task { await loadTargets() }

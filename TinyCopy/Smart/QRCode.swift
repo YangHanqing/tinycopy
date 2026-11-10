@@ -28,8 +28,11 @@ enum QRCode {
     }
 
     static func decode(_ data: Data) -> [String] {
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
-              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+        CGImageSourceCreateWithData(data as CFData, nil).map { decode($0) } ?? []
+    }
+
+    static func decode(_ source: CGImageSource) -> [String] {
+        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
                 kCGImageSourceCreateThumbnailFromImageAlways: true,
                 kCGImageSourceCreateThumbnailWithTransform: true,
                 kCGImageSourceThumbnailMaxPixelSize: 2600,
