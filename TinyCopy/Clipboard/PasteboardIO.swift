@@ -27,7 +27,10 @@ enum PasteboardIO {
 
     private static let textTypes: [NSPasteboard.PasteboardType] = [.string, .rtf, .rtfd, .html]
     private static let richTypes: Set<NSPasteboard.PasteboardType> = [.rtf, .rtfd, .html]
-    private static let imageTypes: [NSPasteboard.PasteboardType] = [.png, .tiff, NSPasteboard.PasteboardType(UTType.jpeg.identifier)]
+    private static let imageTypes: [NSPasteboard.PasteboardType] =
+        [.png, .tiff, NSPasteboard.PasteboardType(UTType.jpeg.identifier), NSPasteboard.PasteboardType(UTType.heic.identifier)]
+    /// Marks content that arrived from another device through Universal Clipboard.
+    static let remoteClipboardType = "com.apple.is-remote-clipboard"
     /// Larger content is not kept: it would bloat the history and slow every launch.
     static let maxBytes = 64 * 1024 * 1024
 
@@ -42,6 +45,11 @@ enum PasteboardIO {
         let fileURLs = items.compactMap { item -> URL? in
             guard let s = item.string(forType: .fileURL), let url = URL(string: s), url.isFileURL else { return nil }
             return url.standardizedFileURL
+        }
+        // Universal Clipboard file URLs point into Apple-managed temporary storage that other apps may
+        // not be allowed to open later, so keep the pixels that come with them instead, or nothing.
+        if !fileURLs.isEmpty, allTypes.contains(remoteClipboardType) {
+            return readImage(pasteboard)
         }
         if !fileURLs.isEmpty {
             let reps = items.compactMap { item -> [TypedData]? in
@@ -68,6 +76,10 @@ enum PasteboardIO {
             return CapturedClip(kind: .text, text: string, content: ClipContent(items: reps), isRich: isRich, imageData: nil)
         }
 
+        return readImage(pasteboard)
+    }
+
+    private static func readImage(_ pasteboard: NSPasteboard) -> CapturedClip? {
         for type in imageTypes {
             if let data = pasteboard.data(forType: type), data.count <= maxBytes {
                 return CapturedClip(kind: .image, text: "", content: ClipContent(items: []), isRich: false, imageData: data)

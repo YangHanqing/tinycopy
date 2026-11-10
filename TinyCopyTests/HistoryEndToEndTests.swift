@@ -200,6 +200,40 @@ final class HistoryEndToEndTests: XCTestCase {
         XCTAssertNotNil(pasteboard.data(forType: .tiff))
     }
 
+    func testUniversalClipboardImageKeepsPixelsNotTheTemporaryFile() async throws {
+        settings.ocrMode = .off
+        let model = makeModel()
+        let png = try renderTextImage("From iPhone")
+        let temp = root.appendingPathComponent("useractivityd/IMG_0001.png")
+        try FileManager.default.createDirectory(at: temp.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try png.write(to: temp)
+        let remote = NSPasteboard.PasteboardType(PasteboardIO.remoteClipboardType)
+
+        func copyRemote(withPixels: Bool) async {
+            let item = NSPasteboardItem()
+            item.setString(temp.absoluteString, forType: .fileURL)
+            if withPixels { item.setData(png, forType: .png) }
+            item.setData(Data(), forType: remote)
+            pasteboard.clearContents()
+            pasteboard.writeObjects([item])
+            model.poll()
+            await model.waitForBackgroundWork()
+        }
+
+        await copyRemote(withPixels: false)
+        XCTAssertTrue(model.items.isEmpty, "a bare Universal Clipboard file URL is not kept")
+
+        await copyRemote(withPixels: true)
+        try FileManager.default.removeItem(at: temp)
+        model.flush()
+        let relaunched = makeModel()
+        let item = try XCTUnwrap(relaunched.items.first)
+        XCTAssertEqual(item.kind, .image)
+        relaunched.writeToPasteboard(item.id)
+        XCTAssertEqual(pasteboard.data(forType: .png), png, "the image survives its temporary file")
+        XCTAssertNil(pasteboard.string(forType: .fileURL))
+    }
+
     func testPreviewPreservesClipboardAndOriginalContentUntilExplicitPaste() async throws {
         let model = makeModel()
         let other = #"{"other":2.50}"#
