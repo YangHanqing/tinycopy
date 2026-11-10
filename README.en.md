@@ -1,59 +1,62 @@
-# TinyCopy
+# TinyCopy Clipboard History
 
 [简体中文](README.md) | **English**
 
-TinyCopy is a macOS clipboard history tool for text, rich text, images and files. It supports search, favorites, translation, image text recognition and common text conversions.
+TinyCopy is a **native macOS clipboard history tool**. It keeps the text, rich text, images and files you copy, finds them again with one shortcut, and pastes them back into the app you were in.
 
-Press `⇧⌘V` to open and type to search. Use Up/Down to choose a record, Left/Right to choose the original or a result, and Enter to paste.
+Press `⇧⌘V` to open it and type to search. Up and Down pick a record, Left and Right pick the original or a converted version, and Return pastes. JSON, encoded text, foreign languages and the text in screenshots can be converted before you paste.
 
-![Text recognition in TinyCopy](assets/screenshots/hero-ocr-light.png)
+For a quick look, see the [introduction page](https://yanghanqing.github.io/tinycopy/?lang=en), with screenshots of the main features.
+
+![TinyCopy overview](assets/screenshots/hero-ocr-light.png)
 
 ## Features
 
+The screenshots use sample content. The interface is in Chinese for now.
+
 | Feature | Description | Screenshot |
 | --- | --- | --- |
-| History, search and favorites | History survives restarts, and repeated copies move to the top. Filter by text, images or files. Search includes recognized text, translations and decoded content. Save and filter frequently used records as favorites. | <img src="assets/screenshots/history.png" width="360" alt="Clipboard history and filters"> |
-| Text conversions | Format or minify JSON, decode JWT, Base64 and URL-encoded text, and convert Unix timestamps. The original and result stay visible together; select one to copy or paste. | <img src="assets/screenshots/hero-json-light.png" width="560" alt="Original and formatted JSON"> |
-| Translation | See the original and translation together using Apple translation. Requires macOS 15 or later; a language pack may need to be downloaded on first use. | <img src="assets/screenshots/hero-translation-dark.png" width="560" alt="Original text and translation"> |
-| Text recognition | Extract text from screenshots and other images for search, copying or pasting. Recognition runs on this Mac and keeps the original image. | <img src="assets/screenshots/hero-ocr-light.png" width="560" alt="An image and its recognized text"> |
-| QR codes | Extract QR content from images or generate a QR image from a URL. Detected links are not opened automatically. | <img src="assets/screenshots/qrcode.png" width="560" alt="A QR image generated from a URL"> |
+| History, search and favorites | Text, rich text, images and files are kept, through restarts too; copying something again moves it to the top. Filter by text, images or files; search also covers recognized text, translations and decoded content. Press `⌘P` to keep a record as a favorite, which is never dropped. | <img src="assets/screenshots/history.png" alt="Clipboard history and filters" width="360"> |
+| File preview | Copied files show what is inside: images, PDFs and videos show a picture, text and code show their text, and files that were moved or deleted are marked. Paste an image file as an image, or a text file as its text. | <img src="assets/screenshots/file-preview-light.png" alt="Preview of a copied image file" width="560"> |
+| JSON, decoding and timestamps | Format or minify JSON, keeping key order and numbers as written; decode JWT, Base64 and URL-encoded text; turn Unix timestamps into dates. The original and the result stay side by side, and a result is used only when you pick it. | <img src="assets/screenshots/hero-json-light.png" alt="Original and formatted JSON" width="560"> |
+| Apple translation | See the original and its translation together, then copy or paste either. Requires macOS 15 or later; a language pack may need to be downloaded on first use. | <img src="assets/screenshots/hero-translation-light.png" alt="Original text and translation" width="560"> |
+| Text recognition | Extract the text from screenshots, meeting notices and other pictures, then search, copy or paste it. Recognition runs on your Mac and keeps the original image. | <img src="assets/screenshots/hero-ocr-light.png" alt="An image and its recognized text" width="560"> |
+| QR codes | Read the QR code in a picture, or turn a URL into a QR image. Links that are read are never opened automatically. | <img src="assets/screenshots/qrcode.png" alt="A QR image generated from a URL" width="560"> |
+| Appearance and window | Light, dark or following the system; the window keeps its place and size. The menu bar icon can be hidden, and TinyCopy can start at login. |  |
 
-Choose light, dark or system appearance. Window size and position are remembered. Screenshots use sample content; the app interface is currently in Chinese.
+## Using it
 
-## Download and use
+| Action | Keys |
+| --- | --- |
+| Open / close | `⇧⌘V` (change it in Settings) |
+| Pick a record / a version | `↑` `↓` / `←` `→` |
+| Paste | `↩`, or double-click a record to paste the original |
+| Copy without pasting | `⌘↩` |
+| Favorite | `⌘P` |
+| Close the preview or the panel | `Esc` |
 
-Download the DMG from [Releases](https://github.com/YangHanqing/tinycopy/releases/latest), open it and drag TinyCopy into Applications. Requires macOS 14 or later, on Apple silicon or Intel. The app is signed and notarized by Apple.
+Pasting for you needs Accessibility permission. With it, Return pastes straight into the previous app; without it, the content goes to the clipboard and you press `⌘V` yourself. If macOS asks about clipboard access, choose Always Allow so the history can be recorded.
 
-The [introduction page](https://yanghanqing.github.io/tinycopy/) has feature examples and download links.
+If another app (a screenshot or clipboard tool) also uses `⇧⌘V`, both respond and the panel may close at once; choose another shortcut in Settings.
 
-Click a record to preview it; double-click to paste the original. `⌘↩` copies only, `⌘P` toggles a favorite, and `Esc` collapses the preview or closes the window. You can change the opening shortcut in Settings.
+## Download and install
 
-Automatic pasting requires Accessibility permission. With permission, Enter pastes into your previous app. Without it, content is copied and you press `⌘V` yourself. If macOS asks about clipboard access, choose Always Allow so your history can be recorded.
+Download the latest version from [Releases](https://github.com/YangHanqing/tinycopy/releases/latest) (or from the [introduction page](https://yanghanqing.github.io/tinycopy/?lang=en#download)), open the DMG and drag TinyCopy into Applications.
 
-## Privacy
+- Requires macOS 14 or later, on Apple silicon or Intel.
+- Apple translation requires macOS 15.
+- The app is signed with a Developer ID and notarized by Apple, so it opens normally.
 
-History stays on this Mac. There is no account or telemetry. Clipboard content marked as concealed or transient, such as passwords from password managers, is ignored by default. Recognition and conversions use system frameworks; Apple translation language packs are downloaded by the system.
+## Privacy and network
 
-<details>
-<summary>Build from source</summary>
+TinyCopy collects no data. The history stays on this Mac, with no account and no cloud sync. Content that password managers and other apps mark as concealed or transient is skipped by default. Text recognition, QR codes and conversions run on your Mac; Apple translation runs on your Mac too, with language packs downloaded by macOS.
 
-Requires Xcode 27 and [XcodeGen](https://github.com/yonaskolb/XcodeGen).
+TinyCopy goes online only to check for updates: once every 30 days it asks GitHub for the latest version number, sending no identifiers. A newer version is mentioned at the bottom of the panel and in the menu; it only opens the release page and never downloads or installs anything. Turn it off in Settings ▸ General.
 
-```sh
-xcodegen generate
-open TinyCopy.xcodeproj
-```
+## Building from source
 
-Run tests:
-
-```sh
-xcodebuild -project TinyCopy.xcodeproj -scheme TinyCopy -derivedDataPath build test
-```
-
-Use `scripts/install.sh` for a locally signed installation. See [site/README.md](site/README.md) for website updates and deployment.
-
-</details>
+Install Xcode 27 or later and [XcodeGen](https://github.com/yonaskolb/XcodeGen), run `xcodegen generate` in the repository root, then open `TinyCopy.xcodeproj` and run the **TinyCopy** scheme.
 
 ## License
 
-GNU General Public License version 3 ([GPL-3.0](LICENSE)).
+GNU General Public License v3 (GPL v3).
