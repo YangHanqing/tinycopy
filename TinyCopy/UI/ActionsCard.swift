@@ -153,7 +153,7 @@ struct ActionsCard: View {
                             .frame(maxWidth: .infinity).padding(12)
                     }
                 } else if let result = action.result {
-                    textBlock(result, monospaced: action.kind != .translate && action.kind != .ocr)
+                    textBlock(result, monospaced: monospaced(action))
                 } else {
                     Text(status(for: action))
                         .font(.system(size: 13))
@@ -175,8 +175,21 @@ struct ActionsCard: View {
         }
     }
 
+    private func monospaced(_ action: SmartAction) -> Bool {
+        switch action.kind {
+        case .translate, .ocr: return false
+        case .fileText:
+            let ext = item.fileURLs.first?.pathExtension.lowercased() ?? ""
+            return !["txt", "text", "md", "markdown"].contains(ext)
+        default: return true
+        }
+    }
+
     @ViewBuilder private var originalContent: some View {
-        if item.kind == .image {
+        if item.kind == .file {
+            // The other file cards are short, so the picture can take the room.
+            FileOriginalView(item: item, preview: state.filePreview(for: item), imageHeight: 330)
+        } else if item.kind == .image {
             VStack(spacing: 8) {
                 if let image {
                     Image(nsImage: image)
@@ -253,6 +266,10 @@ struct ActionsCard: View {
     private func status(for action: SmartAction) -> String {
         let model = state.model
         switch action.kind {
+        case .fileText:
+            return "正在读取文件…"
+        case .fileImage:
+            return "作为图片粘贴，在聊天和文档里直接显示，而不是作为附件。"
         case .ocr:
             return model.ocrRunning.contains(item.id) ? "正在识别图片中的文字…" : "暂无识别结果"
         case .translate:
@@ -320,5 +337,128 @@ private struct LongTextView: NSViewRepresentable {
         textView.font = font
         textView.textColor = .labelColor
         textView.scroll(.zero)
+    }
+}
+
+/// A copied file as it is now: what it looks like, what it is, and whether it still exists.
+private struct FileOriginalView: View {
+    let item: ClipItem
+    let preview: FilePreview?
+    let imageHeight: CGFloat
+
+    var body: some View {
+        if let preview {
+            if let file = preview.single {
+                single(file, preview: preview)
+            } else {
+                list(preview.files)
+            }
+        } else {
+            ProgressView().controlSize(.small).frame(maxWidth: .infinity).frame(height: 80)
+        }
+    }
+
+    @ViewBuilder private func single(_ file: FilePreview.File, preview: FilePreview) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let image = preview.image {
+                Image(nsImage: NSImage(cgImage: image, size: .zero))
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: .infinity)
+                    .frame(maxHeight: imageHeight)
+            }
+            HStack(alignment: .top, spacing: 10) {
+                if preview.image == nil { icon(file, size: 40) }
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(file.url.lastPathComponent)
+                        .font(.system(size: 13, weight: .medium))
+                        .lineLimit(2)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
+                    Text(file.exists ? metadata(file, detail: preview.detail) : "文件已不存在，可能已被移动或删除")
+                        .font(.system(size: 12).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                    Text((file.url.deletingLastPathComponent().path as NSString).abbreviatingWithTildeInPath)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Spacer(minLength: 0)
+            }
+            if let text = preview.text, preview.pasteableText == nil {
+                Text(text.prefix(4000))
+                    .font(.system(size: 12, design: .monospaced))
+                    .lineLimit(12)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .padding(8)
+                    .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 6))
+                Text("文件较大，仅预览开头；粘贴时作为文件。")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            }
+            if file.exists { revealButton([file.url]) }
+        }
+    }
+
+    private func list(_ files: [FilePreview.File]) -> some View {
+        let total = files.compactMap(\.size).reduce(0, +)
+        let missing = files.filter { !$0.exists }.count
+        var summary = "\(files.count) 个文件"
+        if total > 0 { summary += " · 共 " + ByteCountFormatter.string(fromByteCount: total, countStyle: .file) }
+        if missing > 0 { summary += " · \(missing) 个已不存在" }
+        return VStack(alignment: .leading, spacing: 8) {
+            Text(summary).font(.system(size: 12)).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(files.prefix(50), id: \.url) { file in
+                    HStack(spacing: 8) {
+                        icon(file, size: 18)
+                        Text(file.url.lastPathComponent)
+                            .font(.system(size: 13))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .foregroundStyle(file.exists ? .primary : .secondary)
+                            .strikethrough(!file.exists)
+                        Spacer(minLength: 8)
+                        Text(file.exists ? (file.size.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) } ?? "文件夹") : "已不存在")
+                            .font(.system(size: 12).monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                if files.count > 50 {
+                    Text("还有 \(files.count - 50) 个文件").font(.system(size: 12)).foregroundStyle(.secondary)
+                }
+            }
+            let existing = files.filter(\.exists).map(\.url)
+            if !existing.isEmpty { revealButton(existing) }
+        }
+    }
+
+    private func icon(_ file: FilePreview.File, size: CGFloat) -> some View {
+        Group {
+            if file.exists {
+                Image(nsImage: NSWorkspace.shared.icon(forFile: file.url.path)).resizable()
+            } else {
+                Image(systemName: "questionmark.folder").resizable().scaledToFit().foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: size, height: size)
+    }
+
+    private func metadata(_ file: FilePreview.File, detail: String?) -> String {
+        var parts: [String] = []
+        if let type = file.typeName { parts.append(type) }
+        if let detail { parts.append(detail) }
+        if let size = file.size { parts.append(ByteCountFormatter.string(fromByteCount: size, countStyle: .file)) }
+        if let modified = file.modified { parts.append("修改于 " + modified.formatted(date: .abbreviated, time: .shortened)) }
+        return parts.joined(separator: " · ")
+    }
+
+    private func revealButton(_ urls: [URL]) -> some View {
+        Button { NSWorkspace.shared.activateFileViewerSelecting(urls) } label: {
+            Label("在 Finder 中显示", systemImage: "folder").font(.system(size: 12))
+        }
+        .buttonStyle(.link)
     }
 }

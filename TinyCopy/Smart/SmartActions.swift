@@ -4,6 +4,7 @@ enum SmartActionKind: String, Sendable {
     case qrRead, qrGenerate
     case translate, ocr, jsonFormat, jsonMinify, jwtDecode, jwtPayload, base64Decode, urlDecode
     case timestampLocal, timestampISO, pastePlain, trim, filePaths, base64Encode, urlEncode
+    case fileText, fileImage
 }
 
 /// One conversion offered for an item. `result` is nil while it is still being produced (OCR, translation).
@@ -18,7 +19,7 @@ struct SmartAction: Identifiable, Equatable {
     /// Only content-specific results belong in the arrow-key selection path.
     var isPrimary: Bool {
         switch kind {
-        case .qrRead, .qrGenerate, .translate, .ocr, .jsonFormat, .jwtDecode, .base64Decode, .urlDecode, .timestampLocal, .filePaths:
+        case .qrRead, .qrGenerate, .translate, .ocr, .jsonFormat, .jwtDecode, .base64Decode, .urlDecode, .timestampLocal, .filePaths, .fileText, .fileImage:
             return true
         case .jsonMinify, .jwtPayload, .timestampISO, .pastePlain, .trim, .base64Encode, .urlEncode:
             return false
@@ -34,6 +35,8 @@ struct SmartAction: Identifiable, Equatable {
         case .jsonFormat: return "格式化 JSON"
         case .jwtDecode: return "JWT 解码"
         case .timestampLocal: return "本地时间"
+        case .fileText: return "文件内容"
+        case .fileImage: return "图片"
         default: return title.replacingOccurrences(of: "粘贴", with: "")
         }
     }
@@ -61,6 +64,14 @@ enum SmartActions {
                 list.append(SmartAction(kind: .ocr, title: "粘贴识别文字", symbol: "text.viewfinder", result: item.ocrText))
             }
         case .file:
+            // The text and the image are filled in when the file is read (PanelState).
+            if let url = item.fileURLs.first, item.fileURLs.count == 1 {
+                switch FilePreviewLoader.kind(of: url) {
+                case .text: list.append(SmartAction(kind: .fileText, title: "粘贴文件内容", symbol: "doc.plaintext", result: nil))
+                case .image: list.append(SmartAction(kind: .fileImage, title: "粘贴为图片", symbol: "photo", result: nil))
+                default: break
+                }
+            }
             list.append(SmartAction(kind: .filePaths, title: "粘贴文件路径", symbol: "folder", result: item.text))
         case .text:
             list = textActions(for: item, context: context)
@@ -162,7 +173,7 @@ enum SmartActions {
             if let w = item.imageWidth, let h = item.imageHeight { hints.append("\(w)×\(h)") }
         case .file:
             let count = item.fileURLs.count
-            hints.append(count == 1 ? (item.fileURLs.first?.deletingLastPathComponent().path ?? "") : "\(count) 个文件")
+            hints.append(count == 1 ? (item.fileURLs.first.map { ($0.deletingLastPathComponent().path as NSString).abbreviatingWithTildeInPath } ?? "") : "\(count) 个文件")
         case .text:
             if context.smartDetection {
                 switch item.contentType {

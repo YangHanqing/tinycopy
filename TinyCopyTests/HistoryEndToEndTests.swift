@@ -234,6 +234,66 @@ final class HistoryEndToEndTests: XCTestCase {
         XCTAssertNil(pasteboard.string(forType: .fileURL))
     }
 
+    func testCopiedFilesPasteAsTheirTextOrImageAndMissingFilesOfferNeither() async throws {
+        let model = makeModel()
+        let panel = PanelState(model: model)
+        var pastedText: String?
+        var pastedImage: Data?
+        panel.perform = { _, text, _ in pastedText = text }
+        panel.performImage = { data, _ in pastedImage = data }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+
+        func copyFile(_ url: URL) async throws -> UUID {
+            pasteboard.clearContents()
+            pasteboard.writeObjects([url as NSURL])
+            model.poll()
+            await model.waitForBackgroundWork()
+            let item = try XCTUnwrap(model.items.first)
+            XCTAssertEqual(item.kind, .file)
+            panel.prepareForShow()
+            panel.select(item.id)
+            panel.preparePreview()
+            return item.id
+        }
+        func eventually(_ condition: () -> Bool) async {
+            for _ in 0..<250 where !condition() { try? await Task.sleep(for: .milliseconds(20)) }
+        }
+
+        // A Chinese text file in GB18030 pastes as its full text.
+        let note = "会议纪要\n第二行"
+        let gb18030 = String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(CFStringEncodings.GB_18030_2000.rawValue)))
+        let textURL = root.appendingPathComponent("纪要.txt")
+        try XCTUnwrap(note.data(using: gb18030)).write(to: textURL)
+        let textID = try await copyFile(textURL)
+        await eventually { panel.actions.first { $0.kind == .fileText }?.result != nil }
+        panel.choosePreview(.action(.fileText))
+        panel.activate(paste: true)
+        XCTAssertEqual(pastedText, note)
+
+        // An image file pastes as PNG pixels, read from the file only when asked.
+        let jpegURL = root.appendingPathComponent("photo.jpg")
+        let png = try renderTextImage("File image")
+        let jpeg = try XCTUnwrap(NSBitmapImageRep(data: png)?.representation(using: .jpeg, properties: [:]))
+        try jpeg.write(to: jpegURL)
+        let imageID = try await copyFile(jpegURL)
+        await eventually { panel.filePreview(for: try! XCTUnwrap(model.item(imageID)))?.image != nil }
+        panel.choosePreview(.action(.fileImage))
+        panel.activate(paste: true)
+        await eventually { pastedImage != nil }
+        let pasted = try XCTUnwrap(pastedImage)
+        XCTAssertEqual(NSBitmapImageRep(data: pasted)?.pixelsWide, 900)
+        XCTAssertTrue(pasted.starts(with: [0x89, 0x50, 0x4E, 0x47]), "pasted as PNG")
+
+        // Once a file is gone, only its path is left to paste.
+        try FileManager.default.removeItem(at: textURL)
+        panel.prepareForShow()
+        panel.select(textID)
+        panel.preparePreview()
+        await eventually { panel.filePreview(for: try! XCTUnwrap(model.item(textID))) != nil }
+        XCTAssertEqual(panel.filePreview(for: try XCTUnwrap(model.item(textID)))?.single?.exists, false)
+        XCTAssertEqual(panel.actions.map(\.kind), [.filePaths])
+    }
+
     func testPreviewPreservesClipboardAndOriginalContentUntilExplicitPaste() async throws {
         let model = makeModel()
         let other = #"{"other":2.50}"#

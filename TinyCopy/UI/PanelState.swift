@@ -97,6 +97,11 @@ final class PanelState {
     private(set) var qrReadyID: UUID?
     private(set) var qrGeneratingID: UUID?
     private(set) var qrFailedID: UUID?
+    /// The selected file item as it is on disk now; replaced, never accumulated.
+    private(set) var filePreview: FilePreview?
+    @ObservationIgnored private var filePreviewTask: (id: UUID, task: Task<Void, Never>)?
+    @ObservationIgnored private var filePNG: (id: UUID, data: Data?)?
+    @ObservationIgnored private var filePNGTask: (id: UUID, task: Task<Void, Never>)?
 
     var qrCodeData: Data? { qrReadyID == selected?.id ? qrPNG : nil }
 
@@ -159,10 +164,67 @@ final class PanelState {
     func actions(for item: ClipItem) -> [SmartAction] {
         let context = model.smartContext
         let key = "\(context.smartDetection)|\(context.ocrMode.rawValue)|\(context.translationTarget ?? "")"
-        if let cached = cachedActions[item.id], cached.context == key, cached.item == item { return cached.actions }
-        let list = SmartActions.actions(for: item, context: context)
-        cachedActions[item.id] = (item, key, list)
-        return list
+        let list: [SmartAction]
+        if let cached = cachedActions[item.id], cached.context == key, cached.item == item {
+            list = cached.actions
+        } else {
+            list = SmartActions.actions(for: item, context: context)
+            cachedActions[item.id] = (item, key, list)
+        }
+        return item.kind == .file ? withFileResults(list, for: item) : list
+    }
+
+    /// Once the file is read, fills in its text, or drops what the file turned out not to support.
+    private func withFileResults(_ list: [SmartAction], for item: ClipItem) -> [SmartAction] {
+        guard let preview = filePreview, preview.id == item.id else { return list }
+        return list.compactMap { action in
+            switch action.kind {
+            case .fileText:
+                guard let text = preview.pasteableText else { return nil }
+                var action = action
+                action.result = text
+                return action
+            case .fileImage:
+                let unreadable = preview.single?.exists != true || preview.image == nil
+                let failed = filePNG.map { $0.id == item.id && $0.data == nil } ?? false
+                return unreadable || failed ? nil : action
+            default:
+                return action
+            }
+        }
+    }
+
+    func filePreview(for item: ClipItem) -> FilePreview? {
+        filePreview?.id == item.id ? filePreview : nil
+    }
+
+    private func loadFilePreview() {
+        guard let item = selected, item.kind == .file, filePreview?.id != item.id, filePreviewTask?.id != item.id else { return }
+        filePreviewTask?.task.cancel()
+        filePreview = nil
+        let id = item.id
+        filePreviewTask = (id, Task { [weak self] in
+            let preview = await Task.detached(priority: .userInitiated) { await FilePreviewLoader.load(item) }.value
+            guard !Task.isCancelled, let self else { return }
+            self.filePreviewTask = nil
+            guard self.selected?.id == id else { return }
+            self.filePreview = preview
+            self.itemUpdated(id)
+        })
+    }
+
+    private func requestFilePNG() {
+        guard let item = selected, let url = item.fileURLs.first, filePNG?.id != item.id, filePNGTask?.id != item.id else { return }
+        filePNGTask?.task.cancel()
+        let id = item.id
+        filePNGTask = (id, Task { [weak self] in
+            let data = await Task.detached(priority: .userInitiated) { FilePreviewLoader.pngData(of: url) }.value
+            guard !Task.isCancelled, let self else { return }
+            self.filePNGTask = nil
+            guard self.selected?.id == id else { return }
+            self.filePNG = (id, data)
+            self.itemUpdated(id)
+        })
     }
 
     var primaryActions: [SmartAction] { actions.filter(\.isPrimary) }
@@ -215,6 +277,7 @@ final class PanelState {
     func preparePreview() {
         guard previewVisible else { return }
         if let item = selected, item.kind == .image { model.requestQRDetection(item.id) }
+        loadFilePreview()
         primaryActions.forEach { requestPreview($0) }
     }
 
@@ -224,6 +287,7 @@ final class PanelState {
         case .qrGenerate: requestQRCode()
         case .ocr: model.requestOCR(item.id)
         case .translate: model.requestTranslation(item.id, interactive: interactive)
+        case .fileText: loadFilePreview()
         default: break
         }
     }
@@ -237,6 +301,11 @@ final class PanelState {
         navigationActive = false
         previewVisible = false
         waiting = nil
+        // Files may have changed while the panel was closed.
+        filePreviewTask?.task.cancel()
+        filePreviewTask = nil
+        filePreview = nil
+        filePNG = nil
         now = Date()
         focusToken += 1
         let live = Set(model.items.map(\.id))
@@ -247,6 +316,8 @@ final class PanelState {
     func cancelPending() {
         waiting = nil
         cancelQRGeneration()
+        filePNGTask?.task.cancel()
+        filePNGTask = nil
     }
 
     // MARK: Keyboard
@@ -274,7 +345,13 @@ final class PanelState {
             perform?(item, nil, paste)
             return
         }
-        if action.kind == .qrGenerate {
+        if action.kind == .fileImage {
+            if let png = filePNG, png.id == item.id, let data = png.data { performImage?(data, paste) }
+            else {
+                waiting = (item.id, action.kind, paste)
+                requestFilePNG()
+            }
+        } else if action.kind == .qrGenerate {
             if let data = qrCodeData { performImage?(data, paste) }
             else {
                 waiting = (item.id, action.kind, paste)
@@ -343,10 +420,18 @@ final class PanelState {
             }
             return
         }
+        if waiting.kind == .fileImage {
+            guard let png = filePNG, png.id == id else { return }
+            self.waiting = nil
+            if let data = png.data { performImage?(data, waiting.paste) }
+            return
+        }
         let action = actions(for: item).first { $0.kind == waiting.kind }
         if let result = action?.result {
             self.waiting = nil
             perform?(item, result, waiting.paste)
+        } else if action == nil {
+            self.waiting = nil
         } else if model.translationErrors[id] != nil || (waiting.kind == .ocr && item.ocrText == "") {
             self.waiting = nil
         }
