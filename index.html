@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>TinyCopy</title>
-<meta name="description" content="TinyCopy 是一个 macOS 原生的剪贴板历史工具：记录复制过的文字、图片和文件，搜索、预览后粘贴回原来的应用；内置 JSON、解码、翻译、图片文字识别和二维码。免费，开源。">
+<meta name="description" content="TinyCopy 是一个 macOS 原生的剪贴板历史工具：记录复制过的文字、图片和文件，搜索、预览后粘贴回原来的应用。复制的文件或文件夹可以只粘贴路径。内置 JSON、解码、翻译、图片文字识别和二维码。免费，开源。">
 <meta property="og:title" content="TinyCopy">
-<meta property="og:description" content="Clipboard history for macOS: keep copied text, images and files, search and preview them, and paste them back. JSON, decoding, translation, text recognition and QR codes built in. Free and open source.">
+<meta property="og:description" content="Clipboard history for macOS: keep copied text, images and files, search and preview them, and paste them back. A copied file or folder can be pasted as its path. JSON, decoding, translation, text recognition and QR codes built in. Free and open source.">
 <meta property="og:image" content="https://yanghanqing.github.io/tinycopy/img/og.png">
 <meta property="og:url" content="https://yanghanqing.github.io/tinycopy/">
 <meta property="og:type" content="website">
@@ -130,7 +130,8 @@ section { padding: 120px 0 0; }
 .hero-nav { display: flex; align-items: center; justify-content: space-between; gap: 12px 24px; margin-top: 18px; flex-wrap: wrap-reverse; }
 .hero-nav .seg { margin: 0; }
 .hero-nav .cap { margin: 0; color: var(--muted); font-size: 15px; }
-@media (max-width: 700px) { .hero-nav { flex-direction: column-reverse; align-items: stretch; } .hero-nav .seg { display: flex; } .hero-nav .seg button { flex: 1; padding: 6px 6px; font-size: 13px; } }
+.hero-nav .cap { flex: 1 1 16em; min-width: 0; }
+@media (max-width: 700px) { .hero-nav { flex-direction: column-reverse; align-items: stretch; } .hero-nav .seg { display: flex; width: 100%; } .hero-nav .seg button { flex: 1 1 45%; padding: 6px 8px; font-size: 13px; } }
 .keys { margin: 22px 0 0; color: var(--muted); font-size: 15px; }
 
 /* Auto-advancing switchers: a progress line under the current control */
@@ -225,8 +226,8 @@ dialog.zoom img { max-height: 92vh; width: auto; border-radius: 10px; cursor: zo
   <div class="wrap">
     <h1><span class="zh">为 macOS 原生打造的<br>剪贴板历史工具</span><span class="en">Clipboard history,<br>made natively for macOS</span></h1>
     <p class="lede">
-      <span class="zh">记录复制过的文字、图片和文件，按下快捷键即可找回，粘贴回原来的应用。JSON、编码文本、外语和截图里的文字，也能先处理再粘贴。</span>
-      <span class="en">Keep the text, images and files you copy, find them again with one shortcut, and paste them back into the app you were in. JSON, encoded text, foreign languages and the text in screenshots can be converted before you paste.</span>
+      <span class="zh">记录复制过的文字、图片和文件，按下快捷键即可找回，粘贴回原来的应用。复制的文件或文件夹可以只粘贴路径；JSON、编码文本、外语和截图里的文字，也能先处理再粘贴。</span>
+      <span class="en">Keep the text, images and files you copy, find them again with one shortcut, and paste them back into the app you were in. A copied file or folder can be pasted as its path; JSON, encoded text, foreign languages and the text in screenshots can be converted before you paste.</span>
     </p>
     <div class="actions">
       <a class="btn primary" href="https://github.com/YangHanqing/tinycopy/releases/latest">
@@ -247,6 +248,10 @@ dialog.zoom img { max-height: 92vh; width: auto; border-radius: 10px; cursor: zo
           <img class="only-dark" src="img/hero-ocr-dark.png" width="1180" height="600" alt="An image in the history, with the text recognized from it">
         </div>
         <div class="slide">
+          <img class="only-light" src="img/file-preview-light.png" width="1180" height="600" alt="Copied files, with the path of each one in the list" loading="lazy">
+          <img class="only-dark" src="img/file-preview-dark.png" width="1180" height="600" alt="Copied files, with the path of each one in the list" loading="lazy">
+        </div>
+        <div class="slide">
           <img class="only-light" src="img/hero-json-light.png" width="1180" height="600" alt="Copied JSON and its formatted version" loading="lazy">
           <img class="only-dark" src="img/hero-json-dark.png" width="1180" height="600" alt="Copied JSON and its formatted version" loading="lazy">
         </div>
@@ -258,10 +263,12 @@ dialog.zoom img { max-height: 92vh; width: auto; border-radius: 10px; cursor: zo
       <figcaption class="hero-nav">
         <div class="seg" role="tablist" id="heroTabs" aria-label="Screens">
           <button type="button" role="tab" aria-selected="true"><span class="zh">图片识别</span><span class="en">Text recognition</span></button>
+          <button type="button" role="tab" aria-selected="false"><span class="zh">文件路径</span><span class="en">File path</span></button>
           <button type="button" role="tab" aria-selected="false">JSON</button>
           <button type="button" role="tab" aria-selected="false"><span class="zh">翻译</span><span class="en">Translation</span></button>
         </div>
         <p class="cap"><span class="zh">从图片中提取文字，原图和识别结果同时保留。</span><span class="en">Text is extracted from an image, and the image is kept too.</span></p>
+        <p class="cap" hidden><span class="zh">复制文件或文件夹后，按左右键选到路径，回车即可粘贴。</span><span class="en">Copy a file or folder, choose its path with the arrow keys, and Return pastes it.</span></p>
         <p class="cap" hidden><span class="zh">原文和格式化结果并排显示，选中哪份就粘贴哪份。</span><span class="en">The original and the formatted JSON side by side: paste whichever you pick.</span></p>
         <p class="cap" hidden><span class="zh">外语正文自动翻译，按左右键选择原文或译文。</span><span class="en">Foreign text is translated; ← and → choose the original or the translation.</span></p>
       </figcaption>
@@ -293,13 +300,17 @@ dialog.zoom img { max-height: 92vh; width: auto; border-radius: 10px; cursor: zo
 
     <div class="feat">
       <div>
-        <h3><span class="zh">文件预览</span><span class="en">File preview</span></h3>
-        <p><span class="zh">复制的文件直接显示内容：图片、PDF、视频显示画面，文本和代码显示文字。</span><span class="en">Copied files show what is inside: images, PDFs and videos show a picture, text and code show their text.</span></p>
-        <p><span class="zh">图片文件可以作为图片粘贴，文本文件可以直接粘贴其中的文字；文件被移动或删除时会标出。</span><span class="en">Paste an image file as an image, or a text file as its text. Files that were moved or deleted are marked.</span></p>
+        <h3><span class="zh">文件与路径</span><span class="en">Files and paths</span></h3>
+        <p><span class="zh">在 Finder 里复制文件或文件夹后，按 <kbd>←</kbd><kbd>→</kbd> 选到「文件路径」，回车就把路径作为文字粘贴。一次复制多个时，每个路径占一行。</span><span class="en">Copy files or folders in Finder, then use <kbd>←</kbd><kbd>→</kbd> to choose the path. Return pastes it as text, one path per line when you copied several.</span></p>
+        <ul class="points">
+          <li><span class="zh">图片、PDF 和视频显示画面，文本和代码显示文字。</span><span class="en">Images, PDFs and videos show a picture; text and code show their text.</span></li>
+          <li><span class="zh">图片文件可以粘贴成图片，也可以识别其中的文字或二维码；文本文件可以直接粘贴其中的文字。</span><span class="en">Paste an image file as an image, or read the text or QR code in it. A text file can be pasted as its contents.</span></li>
+          <li><span class="zh">文件被移动或删除时会标出。</span><span class="en">Files that were moved or deleted are marked.</span></li>
+        </ul>
       </div>
       <div class="shot">
-        <img class="only-light" src="img/file-preview-light.png" width="1180" height="600" alt="Preview of a copied image file" loading="lazy">
-        <img class="only-dark" src="img/file-preview-dark.png" width="1180" height="600" alt="Preview of a copied image file" loading="lazy">
+        <img class="only-light" src="img/file-preview-light.png" width="1180" height="600" alt="Copied files, with the path of each one in the list" loading="lazy">
+        <img class="only-dark" src="img/file-preview-dark.png" width="1180" height="600" alt="Copied files, with the path of each one in the list" loading="lazy">
       </div>
     </div>
 
@@ -357,7 +368,7 @@ dialog.zoom img { max-height: 92vh; width: auto; border-radius: 10px; cursor: zo
     </div>
     <dl class="facts grid">
       <div><dt><span class="zh">粘贴回原来的应用</span><span class="en">Pastes where you were</span></dt>
-      <dd><span class="zh">面板不会抢走焦点，按回车即粘贴到之前的应用。需要“辅助功能”权限；未授权时内容放回剪贴板，再自行按 <kbd>⌘V</kbd>。</span><span class="en">The panel never takes focus away, so Return pastes into the app you were in. That needs Accessibility permission; without it the content goes to the clipboard for you to press <kbd>⌘V</kbd>.</span></dd></div>
+      <dd><span class="zh">面板不会抢走焦点，按回车即粘贴到之前的应用。需要“辅助功能”权限；未授权时内容放回剪贴板，再自行按 <kbd>⌘V</kbd>。焦点在 Finder 等文件管理器的文件列表或桌面上时，也只复制不粘贴，以免变成新建文件。</span><span class="en">The panel never takes focus away, so Return pastes into the app you were in. That needs Accessibility permission; without it the content goes to the clipboard for you to press <kbd>⌘V</kbd>. In a file list or on the desktop in Finder or another file manager, it only copies, so the paste does not become a new file.</span></dd></div>
       <div><dt><span class="zh">密码不会被记录</span><span class="en">Passwords stay out</span></dt>
       <dd><span class="zh">密码管理器等应用标记为保密或临时的内容默认不记录。</span><span class="en">Content that password managers and other apps mark as concealed or transient is skipped by default.</span></dd></div>
       <div><dt><span class="zh">只存在这台 Mac 上</span><span class="en">Stays on this Mac</span></dt>
