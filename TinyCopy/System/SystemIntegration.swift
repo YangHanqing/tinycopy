@@ -20,6 +20,51 @@ enum Paster {
         }
     }
 
+    /// File managers treat ⌘V outside a text field as "paste items here": with text on the
+    /// pasteboard, Finder makes a new file ("已粘贴 …") in the folder or on the desktop. TinyCopy
+    /// only means to paste into an input, so in these apps it pastes only when a text field (rename,
+    /// search, Go to Folder) has focus; elsewhere it leaves the content on the pasteboard.
+    private static let fileManagers: Set<String> = [
+        "com.apple.finder",
+        "com.cocoatech.PathFinder",
+        "com.binarynights.ForkLift",
+        "com.binarynights.ForkLift-3",
+        "com.binarynights.forklift4",
+        "com.mac.QSpace",
+        "com.mac.QSpace.pro",
+        "com.marta.Marta",
+        "com.commander-one",
+        "com.eltima.cmd1",
+    ]
+
+    /// Whether ⌘V in `app` would land in an input rather than create files.
+    static func acceptsPaste(_ app: NSRunningApplication?) -> Bool {
+        guard let app, let id = app.bundleIdentifier, fileManagers.contains(id) else { return true }
+        return focusedElementIsEditable(pid: app.processIdentifier)
+    }
+
+    private static func focusedElementIsEditable(pid: pid_t) -> Bool {
+        let appElement = AXUIElementCreateApplication(pid)
+        // A busy app must not stall the paste; no answer counts as "not a text field".
+        AXUIElementSetMessagingTimeout(appElement, 0.25)
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(appElement, kAXFocusedUIElementAttribute as CFString, &value) == .success,
+              let value, CFGetTypeID(value) == AXUIElementGetTypeID() else { return false }
+        let element = value as! AXUIElement
+        AXUIElementSetMessagingTimeout(element, 0.25)
+        var role: CFTypeRef?
+        if AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &role) == .success,
+           let role = role as? String,
+           [kAXTextFieldRole, kAXTextAreaRole, kAXComboBoxRole, "AXSearchField"].contains(role) {
+            return true
+        }
+        var settable: DarwinBoolean = false
+        var range: CFTypeRef?
+        return AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &range) == .success
+            && AXUIElementIsAttributeSettable(element, kAXValueAttribute as CFString, &settable) == .success
+            && settable.boolValue
+    }
+
     static func sendCommandV() {
         let source = CGEventSource(stateID: .combinedSessionState)
         // Keep the user's own keys from mixing into the synthetic press.

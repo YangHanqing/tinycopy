@@ -262,6 +262,9 @@ final class PanelController: NSObject, NSWindowDelegate {
             return
         }
         let target = previousApp
+        // Content is already on the pasteboard; outside an input (Finder's file list, the desktop)
+        // ⌘V would create a file instead of pasting text, so stop at copying.
+        guard Paster.acceptsPaste(target) else { return }
         if let target, !target.isActive { target.activate() }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
             Paster.sendCommandV()
