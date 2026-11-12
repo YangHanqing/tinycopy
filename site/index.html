@@ -130,8 +130,7 @@ section { padding: 120px 0 0; }
 .hero-nav { display: flex; align-items: center; justify-content: space-between; gap: 12px 24px; margin-top: 18px; flex-wrap: wrap-reverse; }
 .hero-nav .seg { margin: 0; }
 .hero-nav .cap { margin: 0; color: var(--muted); font-size: 15px; }
-.hero-nav .cap { flex: 1 1 16em; min-width: 0; }
-@media (max-width: 700px) { .hero-nav { flex-direction: column-reverse; align-items: stretch; } .hero-nav .seg { display: flex; width: 100%; } .hero-nav .seg button { flex: 1 1 45%; padding: 6px 8px; font-size: 13px; } }
+@media (max-width: 700px) { .hero-nav { flex-direction: column-reverse; align-items: stretch; } .hero-nav .seg { display: flex; } .hero-nav .seg button { flex: 1; padding: 6px 6px; font-size: 13px; } }
 .keys { margin: 22px 0 0; color: var(--muted); font-size: 15px; }
 
 /* Auto-advancing switchers: a progress line under the current control */
@@ -248,10 +247,6 @@ dialog.zoom img { max-height: 92vh; width: auto; border-radius: 10px; cursor: zo
           <img class="only-dark" src="img/hero-ocr-dark.png" width="1180" height="600" alt="An image in the history, with the text recognized from it">
         </div>
         <div class="slide">
-          <img class="only-light" src="img/file-preview-light.png" width="1180" height="600" alt="Copied files, with the path of each one in the list" loading="lazy">
-          <img class="only-dark" src="img/file-preview-dark.png" width="1180" height="600" alt="Copied files, with the path of each one in the list" loading="lazy">
-        </div>
-        <div class="slide">
           <img class="only-light" src="img/hero-json-light.png" width="1180" height="600" alt="Copied JSON and its formatted version" loading="lazy">
           <img class="only-dark" src="img/hero-json-dark.png" width="1180" height="600" alt="Copied JSON and its formatted version" loading="lazy">
         </div>
@@ -263,12 +258,10 @@ dialog.zoom img { max-height: 92vh; width: auto; border-radius: 10px; cursor: zo
       <figcaption class="hero-nav">
         <div class="seg" role="tablist" id="heroTabs" aria-label="Screens">
           <button type="button" role="tab" aria-selected="true"><span class="zh">图片识别</span><span class="en">Text recognition</span></button>
-          <button type="button" role="tab" aria-selected="false"><span class="zh">文件路径</span><span class="en">File path</span></button>
           <button type="button" role="tab" aria-selected="false">JSON</button>
           <button type="button" role="tab" aria-selected="false"><span class="zh">翻译</span><span class="en">Translation</span></button>
         </div>
         <p class="cap"><span class="zh">从图片中提取文字，原图和识别结果同时保留。</span><span class="en">Text is extracted from an image, and the image is kept too.</span></p>
-        <p class="cap" hidden><span class="zh">复制文件或文件夹后，按左右键选到路径，回车即可粘贴。</span><span class="en">Copy a file or folder, choose its path with the arrow keys, and Return pastes it.</span></p>
         <p class="cap" hidden><span class="zh">原文和格式化结果并排显示，选中哪份就粘贴哪份。</span><span class="en">The original and the formatted JSON side by side: paste whichever you pick.</span></p>
         <p class="cap" hidden><span class="zh">外语正文自动翻译，按左右键选择原文或译文。</span><span class="en">Foreign text is translated; ← and → choose the original or the translation.</span></p>
       </figcaption>
@@ -309,8 +302,8 @@ dialog.zoom img { max-height: 92vh; width: auto; border-radius: 10px; cursor: zo
         </ul>
       </div>
       <div class="shot">
-        <img class="only-light" src="img/file-preview-light.png" width="1180" height="600" alt="Copied files, with the path of each one in the list" loading="lazy">
-        <img class="only-dark" src="img/file-preview-dark.png" width="1180" height="600" alt="Copied files, with the path of each one in the list" loading="lazy">
+        <img class="only-light" src="img/file-preview-light.png" width="1180" height="500" alt="A copied text file, with its path selected for pasting" loading="lazy">
+        <img class="only-dark" src="img/file-preview-dark.png" width="1180" height="500" alt="A copied text file, with its path selected for pasting" loading="lazy">
       </div>
     </div>
 
@@ -377,8 +370,6 @@ dialog.zoom img { max-height: 92vh; width: auto; border-radius: 10px; cursor: zo
       <dd><span class="zh">默认 <kbd>⇧⌘V</kbd> 打开，可以在设置中更换；菜单栏图标可以隐藏，也可以登录时自动启动。</span><span class="en"><kbd>⇧⌘V</kbd> by default, which you can change in Settings. The menu bar icon can be hidden, and TinyCopy can start at login.</span></dd></div>
       <div><dt><span class="zh">外观</span><span class="en">Appearance</span></dt>
       <dd><span class="zh">浅色、深色或跟随系统；窗口位置与大小会被记住。</span><span class="en">Light, dark or following the system; the window keeps its place and size.</span></dd></div>
-      <div><dt><span class="zh">检查更新</span><span class="en">Updates</span></dt>
-      <dd><span class="zh">每 30 天向 GitHub 查询一次新版本，有新版本时在面板底部提示，可以在设置中关闭。</span><span class="en">Asks GitHub for a new version once every 30 days and mentions it at the bottom of the panel. You can turn this off in Settings.</span></dd></div>
     </dl>
   </div>
 </section>
