@@ -15,8 +15,12 @@ final class AppModel {
     /// Newest copy first.
     private(set) var items: [ClipItem] = []
     private(set) var ocrRunning: Set<UUID> = []
-    private(set) var translating: Set<UUID> = []
-    private(set) var translationErrors: [UUID: String] = [:]
+    struct TranslationKey: Hashable {
+        let id: UUID
+        let target: String
+    }
+    private(set) var translating: Set<TranslationKey> = []
+    private(set) var translationErrors: [TranslationKey: String] = [:]
 
     /// Called after an item's OCR or translation result arrives (the panel finishes a waiting paste).
     @ObservationIgnored var onItemUpdated: ((UUID) -> Void)?
@@ -33,9 +37,10 @@ final class AppModel {
     @ObservationIgnored private var qrReading: Set<UUID> = []
     @ObservationIgnored private var ocrQueue: [UUID] = []
     @ObservationIgnored private var ocrTask: Task<Void, Never>?
+    @ObservationIgnored private var invalidatedOCR: Set<UUID> = []
     @ObservationIgnored private let thumbnails = NSCache<NSString, NSImage>()
     @ObservationIgnored private var translationEngineBox: AnyObject?
-    @ObservationIgnored private var interactiveRetry: Set<UUID> = []
+    @ObservationIgnored private var interactiveRetry: Set<TranslationKey> = []
 
     init(store: HistoryStore, settings: AppSettings, pasteboard: NSPasteboard) {
         self.store = store
@@ -101,16 +106,22 @@ final class AppModel {
             item.lastCopied = date
             item.isRich = clip.isRich
             // The same path may now hold a different picture: read it again.
-            if item.imageFileURL != nil {
+            let isImageFile = item.imageFileURL != nil
+            if isImageFile {
+                if ocrRunning.contains(item.id) { invalidatedOCR.insert(item.id) }
                 item.ocrText = nil
+                item.language = nil
                 item.qrContents = nil
+                item.translations.removeAll()
+                clearTranslationStatus(for: [item.id])
             }
             items.insert(item, at: 0)
             // Keep the newest representations (the same text may arrive with other formatting).
             store.saveContent(processed.content, thumbnail: nil, for: item.id)
             reindex(item)
             didChange()
-            if item.imageFileURL != nil {
+            if isImageFile {
+                onItemUpdated?(item.id)
                 requestQRDetection(item.id)
                 if settings.ocrMode == .automatic { requestOCR(item.id) }
             }
@@ -185,14 +196,19 @@ final class AppModel {
     }
 
     private func forget(_ ids: [UUID]) {
+        clearTranslationStatus(for: Set(ids))
         for id in ids {
             searchIndex[id] = nil
             thumbnails.removeObject(forKey: id.uuidString as NSString)
-            translationErrors[id] = nil
         }
         qrQueue.removeAll { ids.contains($0) }
         ocrQueue.removeAll { ids.contains($0) }
         store.delete(ids)
+    }
+
+    private func clearTranslationStatus(for ids: Set<UUID>) {
+        translationErrors = translationErrors.filter { !ids.contains($0.key.id) }
+        interactiveRetry = interactiveRetry.filter { !ids.contains($0.id) }
     }
 
     private func update(_ id: UUID, _ change: (inout ClipItem) -> Void) {
@@ -367,30 +383,43 @@ final class AppModel {
                 self.ocrRunning.insert(next)
                 let store = self.store
                 let file = self.item(next)?.imageFileURL
-                let text = await Task.detached(priority: .utility) { () -> String? in
-                    guard let source = Self.imageSource(file: file, id: next, store: store) else { return nil }
-                    return await TextRecognizer.recognize(source)
+                let recognized = await Task.detached(priority: .utility) { () -> (text: String, language: String?) in
+                    guard let source = Self.imageSource(file: file, id: next, store: store) else { return ("", nil) }
+                    let text = await TextRecognizer.recognize(source)
+                    return (text, LanguageTools.proseLanguage(of: text))
                 }.value
                 self.ocrRunning.remove(next)
-                self.update(next) { $0.ocrText = text ?? "" }
+                if self.invalidatedOCR.remove(next) != nil {
+                    self.requestOCR(next)
+                    continue
+                }
+                self.update(next) {
+                    $0.ocrText = recognized.text
+                    $0.language = recognized.language
+                }
+                if self.settings.translationMode == .automatic { self.requestTranslation(next, interactive: false) }
             }
             self?.ocrTask = nil
         }
     }
 
     /// `interactive` means the user asked for it now: a missing language pack may then prompt a download.
-    func requestTranslation(_ id: UUID, interactive: Bool) {
+    func requestTranslation(_ id: UUID, target explicitTarget: String? = nil, interactive: Bool) {
+        let context = smartContext
         guard #available(macOS 15.0, *), let engine = translationEngineBox as? TranslationEngine,
-              let target = smartContext.translationTarget, let item = item(id), let language = item.language,
-              !LanguageTools.sameLanguage(language, target), item.translations[target] == nil else { return }
-        guard !translating.contains(id) else {
+              let defaultTarget = context.translationTarget, let item = item(id),
+              let input = context.translationInput(for: item) else { return }
+        let target = explicitTarget ?? defaultTarget
+        guard !LanguageTools.sameLanguage(input.language, target), item.translations[target] == nil else { return }
+        let key = TranslationKey(id: id, target: target)
+        guard !translating.contains(key) else {
             // A background attempt is in flight; if it is skipped for a missing language, retry as asked.
-            if interactive { interactiveRetry.insert(id) }
+            if interactive { interactiveRetry.insert(key) }
             return
         }
-        translationErrors[id] = nil
-        translating.insert(id)
-        engine.enqueue(.init(id: id, text: item.text, source: language, target: target), interactive: interactive)
+        translationErrors[key] = nil
+        translating.insert(key)
+        engine.enqueue(.init(id: id, text: input.text, source: input.language, target: target), interactive: interactive)
     }
 
     @available(macOS 15.0, *)
@@ -398,14 +427,26 @@ final class AppModel {
 
     @available(macOS 15.0, *)
     private func deliverTranslation(_ job: TranslationEngine.Job, _ outcome: TranslationEngine.Outcome) {
-        translating.remove(job.id)
+        let key = TranslationKey(id: job.id, target: job.target)
+        translating.remove(key)
+        let retry = interactiveRetry.remove(key) != nil
+        guard let item = item(job.id) else { return }
+        let currentText = item.kind == .text ? item.text : item.ocrText
+        guard currentText == job.text else {
+            if retry {
+                requestTranslation(job.id, target: job.target, interactive: true)
+            } else if settings.translationMode == .automatic {
+                requestTranslation(job.id, interactive: false)
+            }
+            return
+        }
         switch outcome {
         case .translated(let text):
             update(job.id) { $0.translations[job.target] = text }
         case .skipped:
-            if interactiveRetry.remove(job.id) != nil { requestTranslation(job.id, interactive: true) }
+            if retry { requestTranslation(job.id, target: job.target, interactive: true) }
         case .failed(let message):
-            translationErrors[job.id] = message
+            translationErrors[key] = message
             onItemUpdated?(job.id)
         }
     }

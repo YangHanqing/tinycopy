@@ -133,7 +133,7 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     private func applyLayout(on screen: NSScreen) {
         let visible = screen.visibleFrame.insetBy(dx: 20, dy: 20)
-        let minimumWidth: CGFloat = state.previewVisible ? max(Metrics.minimumExpandedSize.width, layout.compactWidth + 340) : Metrics.minimumPanelSize.width
+        let minimumWidth: CGFloat = state.previewVisible ? max(Metrics.minimumExpandedSize.width, layout.compactWidth + Metrics.minimumPreviewWidth + 1) : Metrics.minimumPanelSize.width
         let desiredWidth = state.previewVisible ? layout.expandedWidth : layout.compactWidth
         let width = min(max(desiredWidth, minimumWidth), visible.width)
         let height = min(max(layout.height, Metrics.minimumPanelSize.height), visible.height)

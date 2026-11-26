@@ -358,6 +358,94 @@ final class HistoryEndToEndTests: XCTestCase {
         XCTAssertEqual(pasteboard.string(forType: .string), original)
     }
 
+    func testTemporaryTranslationUsesChosenLanguageWithoutChangingStoredSource() async throws {
+        guard #available(macOS 15.0, *) else { throw XCTSkip("System translation requires macOS 15") }
+        settings.translationMode = .onDemand
+        settings.targetLanguage = "zh-Hans"
+        let model = makeModel()
+        let original = "请把会议安排在星期二下午。"
+        await copy(model, text: original)
+        var item = try XCTUnwrap(model.items.first)
+        // Seed cached translations so this test needs neither installed language packs nor a download prompt.
+        item.language = "zh-Hans"
+        item.translations = ["en": "Please schedule the meeting for Tuesday afternoon.",
+                             "fr": "Veuillez organiser la réunion mardi après-midi."]
+        model.flush()
+        model.store.saveIndexNow([item])
+
+        let relaunched = makeModel()
+        let panel = PanelState(model: relaunched)
+        panel.perform = { selected, text, _ in relaunched.writeToPasteboard(selected.id, text: text) }
+        XCTAssertFalse(panel.primaryActions.contains { $0.kind == .translate })
+        XCTAssertNotNil(panel.translationSource(for: item))
+
+        panel.chooseTranslation(to: "fr", for: item.id)
+        panel.chooseTranslation(to: "en", for: item.id)
+        XCTAssertEqual(panel.selectedAction?.translationTarget, "en")
+        XCTAssertEqual(pasteboard.string(forType: .string), original)
+        panel.activate(paste: true)
+        XCTAssertEqual(pasteboard.string(forType: .string), item.translations["en"])
+        XCTAssertEqual(settings.targetLanguage, "zh-Hans")
+
+        panel.prepareForShow()
+        panel.activate(paste: true)
+        XCTAssertEqual(pasteboard.string(forType: .string), original)
+    }
+
+    func testScreenshotTranslationUsesRecognizedTextAndKeepsOriginalImage() async throws {
+        guard #available(macOS 15.0, *) else { throw XCTSkip("System translation requires macOS 15") }
+        settings.ocrMode = .onDemand
+        settings.translationMode = .onDemand
+        settings.targetLanguage = "zh-Hans"
+        let model = makeModel()
+        let png = try renderTextImage("Please open the door.")
+        pasteboard.clearContents()
+        pasteboard.setData(png, forType: .png)
+        model.poll()
+        await model.waitForBackgroundWork()
+
+        var item = try XCTUnwrap(model.items.first)
+        let panel = PanelState(model: model)
+        panel.select(item.id)
+        XCTAssertNil(panel.translationSource(for: item))
+        XCTAssertEqual(panel.primaryActions.map(\.kind), [.ocr])
+
+        panel.preparePreview()
+        await model.waitForBackgroundWork()
+        item = try XCTUnwrap(model.item(item.id))
+        let input = try XCTUnwrap(model.smartContext.translationInput(for: item))
+        XCTAssertEqual(input.text, "Please open the door.")
+        XCTAssertEqual(input.language, "en")
+        XCTAssertEqual(panel.primaryActions.map(\.kind), [.ocr, .translate])
+        XCTAssertEqual(pasteboard.data(forType: .png), png)
+
+        // Simulate an older OCR entry and a cached result without relying on installed language packs.
+        item.language = nil
+        let translation = "请开门。"
+        item.translations = ["zh-Hans": translation, "fr": "Veuillez ouvrir la porte."]
+        model.flush()
+        model.store.saveIndexNow([item])
+        let relaunched = makeModel()
+        let reopened = PanelState(model: relaunched)
+        reopened.perform = { selected, text, _ in relaunched.writeToPasteboard(selected.id, text: text) }
+        reopened.select(item.id)
+        reopened.choosePreview(.action(.translate))
+        XCTAssertEqual(reopened.selectedAction?.result, translation)
+        reopened.activate(paste: false)
+        XCTAssertEqual(pasteboard.string(forType: .string), translation)
+        XCTAssertEqual(relaunched.search(translation).first?.id, item.id)
+
+        settings.targetLanguage = "en"
+        XCTAssertFalse(reopened.primaryActions.contains { $0.kind == .translate })
+        reopened.chooseTranslation(to: "fr", for: item.id)
+        XCTAssertEqual(reopened.selectedAction?.result, item.translations["fr"])
+        settings.ocrMode = .off
+        XCTAssertNil(reopened.translationSource(for: item))
+        XCTAssertNil(reopened.selectedAction)
+        reopened.activate(paste: true)
+        XCTAssertEqual(pasteboard.data(forType: .png), png)
+    }
+
     func testChangingRecordCancelsPendingOCRPaste() async throws {
         settings.ocrMode = .onDemand
         let model = makeModel()

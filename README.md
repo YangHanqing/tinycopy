@@ -19,7 +19,7 @@ TinyCopy 是一款 **macOS 原生剪贴板历史工具**，记录复制过的文
 | 历史、搜索与收藏 | 文字、富文本、图片和文件都会记录，重启后依然保留；重复复制的内容移到顶部。可按文本、图片、文件筛选，搜索也覆盖识别出的文字、译文和解码结果。常用内容按 `⌘P` 收藏，不会被淘汰。 | <img src="assets/screenshots/history.png" alt="历史记录与分类" width="360"> |
 | 文件与路径 | 在 Finder 里复制文件或文件夹后，可以只粘贴路径，一次复制多个时每个路径占一行。文件内容也会直接显示：图片、PDF、视频显示画面，文本和代码显示文字。图片文件可以作为图片粘贴，也可以识别其中的文字或二维码；文本文件可以直接粘贴其中的文字。文件被移动或删除时会标出。 | <img src="assets/screenshots/file-preview-light.png" alt="复制的文件与路径" width="560"> |
 | JSON、解码与时间戳 | 格式化或压缩 JSON，保留键的顺序和数字原样；解码 JWT、Base64 和 URL 编码文本；把 Unix 时间戳转成日期。原始内容和结果同时显示，选中后才会使用处理结果。 | <img src="assets/screenshots/hero-json-light.png" alt="JSON 原文与格式化结果" width="560"> |
-| 系统翻译 | 使用 Apple 系统翻译，原文与译文一起显示，可选择复制或粘贴哪一份。需要 macOS 15 及以上，首次使用某种语言时可能需要下载语言包。 | <img src="assets/screenshots/hero-translation-light.png" alt="原文与译文" width="560"> |
+| 系统翻译 | 使用 Apple 系统翻译。右侧预览会显示原文与译文，截图和图片文件识别出的文字也可以直接翻译。可单独复制或粘贴译文，或在「更多」里选择其他语言。需要 macOS 15 及以上，首次使用某种语言时可能需要下载语言包。 | <img src="assets/screenshots/hero-translation-light.png" alt="原文与译文" width="560"> |
 | 图片文字识别 | 从截图、会议通知等图片中提取文字，结果可以搜索、复制或粘贴。识别在本机完成，原图保留。 | <img src="assets/screenshots/hero-ocr-light.png" alt="图片与识别结果" width="560"> |
 | 二维码 | 读出图片中的二维码，或把网址生成二维码图片。识别出的链接不会自动打开。 | <img src="assets/screenshots/qrcode.png" alt="网址生成二维码" width="560"> |
 | 外观与窗口 | 支持浅色、深色和跟随系统，窗口位置与大小会被记住。菜单栏图标可以隐藏，也可以登录时自动启动。 |  |

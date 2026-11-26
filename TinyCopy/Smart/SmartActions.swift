@@ -2,7 +2,7 @@ import Foundation
 
 enum SmartActionKind: String, Sendable {
     case qrRead, qrGenerate
-    case translate, ocr, jsonFormat, jsonMinify, jwtDecode, jwtPayload, base64Decode, urlDecode
+    case translate, translateOther, ocr, jsonFormat, jsonMinify, jwtDecode, jwtPayload, base64Decode, urlDecode
     case timestampLocal, timestampISO, pastePlain, trim, filePaths, base64Encode, urlEncode
     case fileText, fileImage
 }
@@ -14,6 +14,7 @@ struct SmartAction: Identifiable, Equatable {
     var symbol: String
     var result: String?
     var note: String?
+    var translationTarget: String?
     var id: SmartActionKind { kind }
 
     /// Only content-specific results belong in the arrow-key selection path.
@@ -21,7 +22,7 @@ struct SmartAction: Identifiable, Equatable {
         switch kind {
         case .qrRead, .qrGenerate, .translate, .ocr, .jsonFormat, .jwtDecode, .base64Decode, .urlDecode, .timestampLocal, .filePaths, .fileText, .fileImage:
             return true
-        case .jsonMinify, .jwtPayload, .timestampISO, .pastePlain, .trim, .base64Encode, .urlEncode:
+        case .translateOther, .jsonMinify, .jwtPayload, .timestampISO, .pastePlain, .trim, .base64Encode, .urlEncode:
             return false
         }
     }
@@ -47,6 +48,17 @@ struct SmartContext {
     var ocrMode: OCRMode
     /// nil when translation is unavailable (macOS 14) or off.
     var translationTarget: String?
+
+    func translationInput(for item: ClipItem) -> (text: String, language: String)? {
+        guard translationTarget != nil else { return nil }
+        if item.kind == .text, let language = item.language {
+            return (item.text, language)
+        }
+        guard ocrMode != .off, item.isPicture, let text = item.ocrText, !text.isEmpty,
+              // Older history has OCR text without a stored language.
+              let language = item.language ?? LanguageTools.proseLanguage(of: text) else { return nil }
+        return (text, language)
+    }
 }
 
 enum SmartActions {
@@ -60,15 +72,16 @@ enum SmartActions {
             list = pictureActions(for: item, context: context)
         case .file:
             // The text and the image are filled in when the file is read (PanelState).
-            if let url = item.fileURLs.first, item.fileURLs.count == 1 {
-                switch FilePreviewLoader.kind(of: url) {
-                case .text: list.append(SmartAction(kind: .fileText, title: "粘贴文件内容", symbol: "doc.plaintext", result: nil))
-                case .image: list.append(SmartAction(kind: .fileImage, title: "粘贴为图片", symbol: "photo", result: nil))
-                default: break
-                }
+            if item.isPicture {
+                list += pictureActions(for: item, context: context)
+            } else if let url = item.fileURLs.first, item.fileURLs.count == 1,
+                      FilePreviewLoader.kind(of: url) == .text {
+                list.append(SmartAction(kind: .fileText, title: "粘贴文件内容", symbol: "doc.plaintext", result: nil))
             }
-            if item.isPicture { list += pictureActions(for: item, context: context) }
             list.append(SmartAction(kind: .filePaths, title: "粘贴文件路径", symbol: "folder", result: item.text))
+            if item.isPicture {
+                list.append(SmartAction(kind: .fileImage, title: "粘贴为图片", symbol: "photo", result: nil))
+            }
         case .text:
             list = textActions(for: item, context: context)
         }
@@ -79,14 +92,15 @@ enum SmartActions {
         "翻译为\(LanguageTools.displayName(target))"
     }
 
+    static func translation(for item: ClipItem, target: String, temporary: Bool = false) -> SmartAction {
+        SmartAction(kind: temporary ? .translateOther : .translate, title: translationTitle(target),
+                    symbol: "translate", result: item.translations[target], translationTarget: target)
+    }
+
     private static func textActions(for item: ClipItem, context: SmartContext) -> [SmartAction] {
         let text = item.text
         var list: [SmartAction] = []
-        if let target = context.translationTarget, let language = item.language,
-           !LanguageTools.sameLanguage(language, target) {
-            list.append(SmartAction(kind: .translate, title: translationTitle(target), symbol: "translate",
-                                    result: item.translations[target]))
-        }
+        if let translation = defaultTranslation(for: item, context: context) { list.append(translation) }
         let small = text.utf8.count <= maxTransformBytes
         if context.smartDetection, small {
             switch item.contentType {
@@ -153,7 +167,14 @@ enum SmartActions {
         if context.ocrMode != .off, item.ocrText != "" {
             list.append(SmartAction(kind: .ocr, title: "粘贴识别文字", symbol: "text.viewfinder", result: item.ocrText))
         }
+        if let translation = defaultTranslation(for: item, context: context) { list.append(translation) }
         return list
+    }
+
+    private static func defaultTranslation(for item: ClipItem, context: SmartContext) -> SmartAction? {
+        guard let target = context.translationTarget, let input = context.translationInput(for: item),
+              !LanguageTools.sameLanguage(input.language, target) else { return nil }
+        return translation(for: item, target: target)
     }
 
     /// Text derived from the item that the list shows on its second line: what OCR read in an

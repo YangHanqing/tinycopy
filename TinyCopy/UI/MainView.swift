@@ -7,6 +7,7 @@ enum Metrics {
     static let panelSize = CGSize(width: 620, height: 520)
     static let expandedWidth: CGFloat = 1180
     static let historyWidth: CGFloat = 620
+    static let minimumPreviewWidth: CGFloat = 340
     static let searchArea: CGFloat = 56
     static let searchField: CGFloat = 36
     static let historyRow: CGFloat = 64
@@ -19,20 +20,24 @@ enum Metrics {
 struct MainView: View {
     @Bindable var state: PanelState
     @FocusState private var searchFocused: Bool
+    @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
         GeometryReader { geometry in
             HStack(spacing: 0) {
                 VStack(spacing: 0) {
-                    searchBar
-                    filters
+                    VStack(spacing: 0) {
+                        searchBar
+                        filters
+                    }
+                    .background(.bar)
                     Divider()
                     HistoryList(state: state)
                         .frame(maxHeight: .infinity)
                     Divider()
-                    footer
+                    footer.background(.bar)
                 }
-                .frame(width: state.previewVisible ? min(state.historyColumnWidth, geometry.size.width - 340) : geometry.size.width)
+                .frame(width: historyWidth(in: geometry.size.width))
                 if state.previewVisible {
                     Divider()
                     if let item = state.selected {
@@ -49,11 +54,19 @@ struct MainView: View {
         .clipShape(RoundedRectangle(cornerRadius: Metrics.cornerRadius, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: Metrics.cornerRadius, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5)
+                .strokeBorder(Color(nsColor: .separatorColor), lineWidth: contrast == .increased ? 1 : 0.5)
+                .allowsHitTesting(false)
         )
         .background(translationHost)
         .preferredColorScheme(state.model.settings.appearance.colorScheme)
         .onChange(of: state.focusToken, initial: true) { searchFocused = true }
+    }
+
+    private func historyWidth(in width: CGFloat) -> CGFloat {
+        guard state.previewVisible else { return width }
+        // Keep both columns useful even when the expanded window is clamped to a small screen.
+        let previewWidth = min(Metrics.minimumPreviewWidth, width * 0.45)
+        return min(state.historyColumnWidth, max(0, width - previewWidth - 1))
     }
 
     private var searchBar: some View {
@@ -63,7 +76,8 @@ struct MainView: View {
                 .foregroundStyle(.secondary)
             TextField("", text: $state.query, prompt: Text("搜索剪贴板历史"))
                 .textFieldStyle(.plain)
-                .font(.system(size: 17))
+                .font(.system(size: 16))
+                .accessibilityLabel("搜索剪贴板历史")
                 .focused($searchFocused)
                 .onTapGesture { state.editSearch() }
             if !state.query.isEmpty {
@@ -73,11 +87,19 @@ struct MainView: View {
                     Image(systemName: "xmark.circle.fill").foregroundStyle(.tertiary)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("清除搜索")
             }
         }
         .padding(.horizontal, 10)
         .frame(height: Metrics.searchField)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.primary.opacity(0.06)))
+        .background(Color(nsColor: .tertiarySystemFill), in: .rect(cornerRadius: 9))
+        .overlay {
+            if contrast == .increased {
+                RoundedRectangle(cornerRadius: 9)
+                    .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1)
+                    .allowsHitTesting(false)
+            }
+        }
         .padding(.horizontal, Metrics.padding)
         .frame(height: Metrics.searchArea)
         .overlay(alignment: .top) { WindowDragArea().frame(height: 10).accessibilityHidden(true) }
@@ -85,25 +107,26 @@ struct MainView: View {
     }
 
     private var filters: some View {
-        HStack(spacing: 6) {
-            ForEach(HistoryFilter.allCases) { filter in
-                HistoryFilterButton(title: filter.title, selected: state.filter == filter) {
-                    state.filter = filter
+        HStack(spacing: 8) {
+            Picker("记录分类", selection: $state.filter) {
+                ForEach(HistoryFilter.allCases) { filter in
+                    Text(filter.title).tag(filter)
                 }
             }
-            Button { state.favoritesOnly.toggle() } label: {
+            .labelsHidden()
+            .pickerStyle(.segmented)
+
+            Toggle(isOn: $state.favoritesOnly) {
                 Image(systemName: state.favoritesOnly ? "star.fill" : "star")
-                    .font(.system(size: 14))
-                    .foregroundStyle(state.favoritesOnly ? Color.accentColor : .secondary)
-                    .frame(width: 36, height: 30)
-                    .background(RoundedRectangle(cornerRadius: 7).fill(state.favoritesOnly ? Color.accentColor.opacity(0.18) : .clear))
-                    .contentShape(RoundedRectangle(cornerRadius: 7))
+                    .accessibilityLabel("只看收藏")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("只看收藏")
+            .toggleStyle(.button)
+            .tint(.secondary)
             .help("只看收藏，可与分类和搜索同时使用")
-            .accessibilityAddTraits(state.favoritesOnly ? [.isSelected] : [])
+
+            Spacer(minLength: 0)
         }
+        .controlSize(.large)
         .padding(.horizontal, Metrics.padding)
         .padding(.bottom, 10)
     }
@@ -140,32 +163,6 @@ struct MainView: View {
         if #available(macOS 15.0, *), let engine = state.model.translationEngine {
             TranslationHost(engine: engine)
         }
-    }
-}
-
-/// Equal-width category buttons use the same soft selection treatment as history rows.
-private struct HistoryFilterButton: View {
-    let title: String
-    let selected: Bool
-    let action: () -> Void
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 13, weight: selected ? .medium : .regular))
-                .foregroundStyle(selected ? .primary : .secondary)
-                .frame(maxWidth: .infinity)
-                .frame(height: 30)
-                .background(
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(selected ? Color.accentColor.opacity(0.18) : (hovering ? Color.primary.opacity(0.04) : .clear))
-                )
-                .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(selected ? [.isSelected] : [])
-        .onHover { hovering = $0 }
     }
 }
 
@@ -252,6 +249,7 @@ struct HistoryRow: View {
     let now: Date
     let model: AppModel
     @State private var hovering = false
+    @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
         HStack(spacing: 10) {
@@ -277,12 +275,24 @@ struct HistoryRow: View {
         }
         .padding(.horizontal, 10)
         .frame(height: Metrics.historyRow)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(selected ? Color.accentColor.opacity(0.18) : (hovering ? Color.primary.opacity(0.04) : .clear))
-        )
+        .background(rowFill, in: .rect(cornerRadius: 8))
+        .overlay {
+            if selected && contrast == .increased {
+                RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(Color(nsColor: .selectedContentBackgroundColor), lineWidth: 1)
+                    .allowsHitTesting(false)
+            }
+        }
         .contentShape(Rectangle())
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
         .onHover { hovering = $0 }
+    }
+
+    private var rowFill: Color {
+        if selected {
+            return Color(nsColor: .selectedContentBackgroundColor).opacity(contrast == .increased ? 0.32 : 0.18)
+        }
+        return hovering ? Color(nsColor: .quaternarySystemFill) : .clear
     }
 
     /// Metadata stays secondary, but remains readable at the same size throughout the list.
@@ -320,7 +330,7 @@ struct HistoryRow: View {
     private var leading: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.primary.opacity(0.06))
+                .fill(Color(nsColor: .quaternarySystemFill))
             if item.kind == .image, let image = model.thumbnail(for: item) {
                 Image(nsImage: image)
                     .resizable()
@@ -339,10 +349,6 @@ struct HistoryRow: View {
         }
         .frame(width: Metrics.leadingSize, height: Metrics.leadingSize)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
-        )
     }
 
     private var symbol: String {
@@ -404,13 +410,4 @@ enum TimeLabel {
     }
 
     static func full(_ date: Date) -> String { seconds.string(from: date) }
-}
-
-/// Colors the system palette has no name for.
-enum Palette {
-    /// The raised surface of the actions card: white in light mode, a step above the window in dark.
-    static let raised = Color(nsColor: NSColor(name: nil) { appearance in
-        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? NSColor(white: 0.20, alpha: 1) : .white
-    })
-
 }

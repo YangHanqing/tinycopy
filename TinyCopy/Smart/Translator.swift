@@ -49,8 +49,9 @@ final class TranslationEngine {
                 deliver?(job, .failed("系统翻译不支持从\(LanguageTools.displayName(job.source))翻译为\(LanguageTools.displayName(job.target))。"))
                 return
             }
+            let shouldStart = jobs.isEmpty && !running
             jobs.append(job)
-            if !running { start() }
+            if shouldStart { start() }
         }
     }
 

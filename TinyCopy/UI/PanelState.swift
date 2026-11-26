@@ -12,12 +12,12 @@ enum HistoryFilter: String, CaseIterable, Identifiable {
         case .file: return "文件"
         }
     }
-    var kind: ClipKind? {
+    func matches(_ item: ClipItem) -> Bool {
         switch self {
-        case .all: return nil
-        case .text: return .text
-        case .image: return .image
-        case .file: return .file
+        case .all: return true
+        case .text: return item.kind == .text
+        case .image: return item.isPicture
+        case .file: return item.kind == .file && !item.isPicture
         }
     }
 }
@@ -61,6 +61,7 @@ final class PanelState {
                 HangMonitor.note("\(previewVisible ? "预览中切换" : "选中")记录：\(selected.map(HangMonitor.describe) ?? "无")")
                 waiting = nil
                 cancelQRGeneration()
+                temporaryTranslation = nil
                 previewChoice = .original
             }
         }
@@ -134,7 +135,15 @@ final class PanelState {
     /// An action the user chose before its result existed (OCR or translation still running).
     /// Dropped as soon as the user moves on (other item or action, card or panel closed), so a late
     /// result never pastes into whatever app is in front by then.
-    @ObservationIgnored private var waiting: (id: UUID, kind: SmartActionKind, paste: Bool)?
+    private struct PendingUse {
+        let id: UUID
+        let kind: SmartActionKind
+        var translationTarget: String? = nil
+        let paste: Bool
+    }
+    @ObservationIgnored private var waiting: PendingUse?
+    private var temporaryTranslation: AppModel.TranslationKey?
+    private var supportedTranslationTargets: [String]?
     /// Conversions are costly for large text (~0.1 s for 1 MB of JSON) and every visible row's context
     /// menu asks for them on each redraw, so they are computed once per item version.
     @ObservationIgnored private var cachedActions: [UUID: (item: ClipItem, context: String, actions: [SmartAction])] = [:]
@@ -147,7 +156,7 @@ final class PanelState {
     var results: [ClipItem] {
         let matches = model.search(query)
         return matches.filter { item in
-            (!favoritesOnly || item.pinned) && (filter.kind.map { item.kind == $0 } ?? true)
+            (!favoritesOnly || item.pinned) && filter.matches(item)
         }
     }
 
@@ -158,7 +167,13 @@ final class PanelState {
 
     var actions: [SmartAction] {
         guard let item = selected else { return [] }
-        return actions(for: item)
+        var list = actions(for: item)
+        if let temporaryTranslation, temporaryTranslation.id == item.id,
+           let source = translationSource(for: item),
+           isOtherTarget(temporaryTranslation.target, from: source) {
+            list.append(SmartActions.translation(for: item, target: temporaryTranslation.target, temporary: true))
+        }
+        return list
     }
 
     func actions(for item: ClipItem) -> [SmartAction] {
@@ -231,8 +246,37 @@ final class PanelState {
     }
 
     var primaryActions: [SmartAction] { actions.filter(\.isPrimary) }
-    var moreActions: [SmartAction] { actions.filter { !$0.isPrimary } }
+    var moreActions: [SmartAction] { actions.filter { !$0.isPrimary && $0.kind != .translateOther } }
     var previewChoices: [PreviewChoice] { [.original] + primaryActions.map { .action($0.kind) } }
+
+    func translationSource(for item: ClipItem) -> String? {
+        model.smartContext.translationInput(for: item)?.language
+    }
+
+    private func isOtherTarget(_ target: String, from source: String) -> Bool {
+        guard let defaultTarget = model.smartContext.translationTarget else { return false }
+        return !LanguageTools.sameLanguage(source, target) && !LanguageTools.sameLanguage(defaultTarget, target)
+    }
+
+    func otherTranslationTargets(from source: String) -> [String]? {
+        supportedTranslationTargets?.filter { isOtherTarget($0, from: source) }
+    }
+
+    func loadTranslationTargets() async {
+        guard #available(macOS 15.0, *), supportedTranslationTargets == nil else { return }
+        let targets = await TranslationEngine.supportedTargets()
+        guard !Task.isCancelled else { return }
+        supportedTranslationTargets = targets
+    }
+
+    func chooseTranslation(to target: String, for id: UUID) {
+        guard let item = selected, item.id == id, let source = translationSource(for: item),
+              isOtherTarget(target, from: source) else { return }
+        selectedID = id
+        waiting = nil
+        temporaryTranslation = .init(id: id, target: target)
+        choosePreview(.action(.translateOther), interactive: true)
+    }
 
     private var availableChoices: [PreviewChoice] { [.original] + actions.map { .action($0.kind) } }
 
@@ -245,14 +289,15 @@ final class PanelState {
         return actions.first { $0.kind == kind }
     }
 
-    func choosePreview(_ choice: PreviewChoice) {
+    func choosePreview(_ choice: PreviewChoice, interactive: Bool = false) {
         guard let item = selected, availableChoices.contains(choice) else { return }
         // Pin the current record before starting work; new captures must not change its identity.
         selectedID = item.id
         navigationActive = true
         previewVisible = true
+        if previewChoice != choice { waiting = nil }
         previewChoice = choice
-        startPendingWork()
+        startPendingWork(force: interactive)
     }
 
     /// Left/right (and Tab) have one meaning, regardless of which pane was last clicked.
@@ -281,7 +326,7 @@ final class PanelState {
         guard previewVisible else { return }
         if let item = selected, item.isPicture { model.requestQRDetection(item.id) }
         loadFilePreview()
-        primaryActions.forEach { requestPreview($0) }
+        primaryActions.filter { $0.kind != .translate }.forEach { requestPreview($0) }
     }
 
     func requestPreview(_ action: SmartAction, interactive: Bool = false) {
@@ -289,7 +334,8 @@ final class PanelState {
         switch action.kind {
         case .qrGenerate: requestQRCode()
         case .ocr: model.requestOCR(item.id)
-        case .translate: model.requestTranslation(item.id, interactive: interactive)
+        case .translate, .translateOther:
+            model.requestTranslation(item.id, target: action.translationTarget, interactive: interactive)
         case .fileText: loadFilePreview()
         default: break
         }
@@ -301,6 +347,7 @@ final class PanelState {
         favoritesOnly = false
         selectedID = nil
         previewChoice = .original
+        temporaryTranslation = nil
         navigationActive = false
         previewVisible = false
         waiting = nil
@@ -351,19 +398,19 @@ final class PanelState {
         if action.kind == .fileImage {
             if let png = filePNG, png.id == item.id, let data = png.data { performImage?(data, paste) }
             else {
-                waiting = (item.id, action.kind, paste)
+                waiting = PendingUse(id: item.id, kind: action.kind, paste: paste)
                 requestFilePNG()
             }
         } else if action.kind == .qrGenerate {
             if let data = qrCodeData { performImage?(data, paste) }
             else {
-                waiting = (item.id, action.kind, paste)
+                waiting = PendingUse(id: item.id, kind: action.kind, paste: paste)
                 requestQRCode()
             }
         } else if let result = action.result {
             perform?(item, result, paste)
         } else {
-            waiting = (item.id, action.kind, paste)
+            waiting = PendingUse(id: item.id, kind: action.kind, translationTarget: action.translationTarget, paste: paste)
             startPendingWork(force: true)
         }
     }
@@ -429,13 +476,17 @@ final class PanelState {
             if let data = png.data { performImage?(data, waiting.paste) }
             return
         }
-        let action = actions(for: item).first { $0.kind == waiting.kind }
-        if let result = action?.result {
+        guard selected?.id == id, let action = selectedAction, action.kind == waiting.kind,
+              action.translationTarget == waiting.translationTarget else {
+            self.waiting = nil
+            return
+        }
+        if let result = action.result {
             self.waiting = nil
             perform?(item, result, waiting.paste)
-        } else if action == nil {
+        } else if let target = waiting.translationTarget, model.translationErrors[.init(id: id, target: target)] != nil {
             self.waiting = nil
-        } else if model.translationErrors[id] != nil || (waiting.kind == .ocr && item.ocrText == "") {
+        } else if waiting.kind == .ocr && item.ocrText == "" {
             self.waiting = nil
         }
     }

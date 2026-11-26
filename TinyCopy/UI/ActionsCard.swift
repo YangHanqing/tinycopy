@@ -7,10 +7,12 @@ struct ActionsCard: View {
     let item: ClipItem
     @State private var image: NSImage?
     @State private var imageLoaded = false
+    @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
+        let translation = state.primaryActions.first { $0.kind == .translate }
         VStack(spacing: 0) {
-            toolbar
+            toolbar.background(.bar)
             Divider()
             ScrollViewReader { proxy in
                 ScrollView {
@@ -32,12 +34,17 @@ struct ActionsCard: View {
                 }
             }
             Divider()
-            footer
+            footer.background(.bar)
         }
-        .background(Palette.raised)
         .task(id: item.id) {
             state.preparePreview()
             await loadImage()
+        }
+        .task(id: state.translationSource(for: item) != nil) {
+            if state.translationSource(for: item) != nil { await state.loadTranslationTargets() }
+        }
+        .task(id: translation?.translationTarget) {
+            if let translation, state.selected?.id == item.id { state.requestPreview(translation) }
         }
     }
 
@@ -59,45 +66,83 @@ struct ActionsCard: View {
                     proxy.scrollTo(value, anchor: .center)
                 }
             }
-            if !state.moreActions.isEmpty {
-                Menu {
-                    ForEach(state.moreActions) { action in
-                        Button(action.previewTitle) { state.choosePreview(.action(action.kind)) }
-                    }
-                } label: {
-                    Text(state.selectedAction.flatMap { !$0.isPrimary ? $0.previewTitle : nil } ?? "更多")
-                        .font(.system(size: 12))
-                        .foregroundStyle(state.selectedAction?.isPrimary == false ? Color.accentColor : .secondary)
-                }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
+            if !state.moreActions.isEmpty || state.translationSource(for: item) != nil {
+                moreMenu.fixedSize()
             }
-            Button { state.collapsePreview() } label: {
-                Image(systemName: "sidebar.right")
-                    .accessibilityLabel("收起预览")
-                    .frame(width: 24, height: 30)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
+            collapseButton
         }
         .padding(.trailing, 10)
         .frame(height: Metrics.searchArea)
     }
 
-    private func choice(_ title: String, value: PanelState.PreviewChoice) -> some View {
-        Button { state.choosePreview(value) } label: {
-            Text(title)
-                .font(.system(size: 13))
-                .padding(.horizontal, 10)
-                .frame(height: 30)
-                .background(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(state.currentPreview == value ? Color.accentColor.opacity(0.16) : Color.primary.opacity(0.04))
-                )
-                .contentShape(RoundedRectangle(cornerRadius: 6))
+    @ViewBuilder private var moreMenu: some View {
+        let menu = Menu {
+            if let source = state.translationSource(for: item) {
+                Menu("翻译为其他语言…") {
+                    if let targets = state.otherTranslationTargets(from: source) {
+                        if targets.isEmpty {
+                            Text("没有可用的目标语言")
+                        }
+                        ForEach(targets, id: \.self) { target in
+                            Button(LanguageTools.displayName(target)) { state.chooseTranslation(to: target, for: item.id) }
+                        }
+                    } else {
+                        Text("正在读取可用语言…")
+                    }
+                }
+                if !state.moreActions.isEmpty { Divider() }
+            }
+            ForEach(state.moreActions) { action in
+                Button(action.previewTitle) { state.choosePreview(.action(action.kind)) }
+            }
+        } label: {
+            Text(state.selectedAction.flatMap { !$0.isPrimary && $0.kind != .translateOther ? $0.previewTitle : nil } ?? "更多")
+                .font(.system(size: 12))
+                .foregroundStyle(state.selectedAction?.isPrimary == false ? .primary : .secondary)
+        }
+        .menuStyle(.borderlessButton)
+        if #available(macOS 26.0, *) {
+            menu.padding(.horizontal, 8).previewToolbarGlass()
+        } else {
+            menu
+        }
+    }
+
+    @ViewBuilder private var collapseButton: some View {
+        let width: CGFloat = if #available(macOS 26.0, *) { 36 } else { 24 }
+        let button = Button { state.collapsePreview() } label: {
+            Image(systemName: "sidebar.right")
+                .accessibilityLabel("收起预览")
+                .frame(width: width, height: 30)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+        if #available(macOS 26.0, *) {
+            button.previewToolbarGlass()
+        } else {
+            button
+        }
+    }
+
+    private func choice(_ title: String, value: PanelState.PreviewChoice) -> some View {
+        let selected = state.currentPreview == value
+        return Button { state.choosePreview(value) } label: {
+            Text(title)
+                .font(.system(size: 13, weight: selected ? .medium : .regular))
+                .foregroundStyle(selected ? .primary : .secondary)
+                .padding(.horizontal, 10)
+                .frame(height: 30)
+                .background(selected ? selectionFill : Color.clear, in: .rect(cornerRadius: 7))
+                .contentShape(.rect(cornerRadius: 7))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
         .id(value)
+    }
+
+    private var selectionFill: Color {
+        Color(nsColor: contrast == .increased ? .secondarySystemFill : .tertiarySystemFill)
     }
 
     private func contentCard<Content: View>(_ title: String, symbol: String,
@@ -108,32 +153,39 @@ struct ActionsCard: View {
             Button { state.choosePreview(choice) } label: {
                 HStack(spacing: 6) {
                     Label(title, systemImage: symbol)
+                        .fontWeight(.semibold)
                     Spacer()
-                    if selected { Label("回车使用", systemImage: "checkmark.circle.fill") }
+                    if selected {
+                        Label("回车使用", systemImage: "checkmark.circle.fill")
+                    }
                 }
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(selected ? Color.accentColor : .secondary)
+                .font(.system(size: 12))
+                .foregroundStyle(selected ? .primary : .secondary)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityAddTraits(selected ? [.isSelected] : [])
             content()
                 .padding(.horizontal, 12)
                 .padding(.bottom, 12)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(selected ? Color.accentColor.opacity(0.04) : Color.primary.opacity(0.02))
-        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .strokeBorder(selected ? Color.accentColor.opacity(0.45) : Color.primary.opacity(0.08), lineWidth: 1)
-        )
+        .background(selected ? selectionFill : Color.clear, in: .rect(cornerRadius: 9))
+        .overlay {
+            if selected && contrast == .increased {
+                RoundedRectangle(cornerRadius: 9)
+                    .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1)
+                    .allowsHitTesting(false)
+            }
+        }
         .id(choice)
     }
 
     private func resultCard(_ action: SmartAction) -> some View {
-        contentCard(action.previewTitle, symbol: action.symbol, choice: .action(action.kind)) {
+        contentCard(action.translationTarget == nil ? action.previewTitle : action.title,
+                    symbol: action.symbol, choice: .action(action.kind)) {
             VStack(alignment: .leading, spacing: 10) {
                 if action.kind == .qrGenerate {
                     if let data = state.qrCodeData, let qrImage = NSImage(data: data) {
@@ -158,10 +210,10 @@ struct ActionsCard: View {
                     Text(status(for: action))
                         .font(.system(size: 13))
                         .foregroundStyle(.secondary)
-                    if action.kind == .translate {
+                    if let key = translationKey(for: action) {
                         Button("开始翻译") { state.requestPreview(action, interactive: true) }
                             .buttonStyle(.bordered)
-                            .disabled(state.model.translating.contains(item.id))
+                            .disabled(state.model.translating.contains(key))
                     } else if action.kind == .ocr && !state.model.ocrRunning.contains(item.id) {
                         Button("识别文字") { state.requestPreview(action) }
                             .buttonStyle(.bordered)
@@ -177,7 +229,7 @@ struct ActionsCard: View {
 
     private func monospaced(_ action: SmartAction) -> Bool {
         switch action.kind {
-        case .translate, .ocr: return false
+        case .translate, .translateOther, .ocr: return false
         case .fileText:
             let ext = item.fileURLs.first?.pathExtension.lowercased() ?? ""
             return !["txt", "text", "md", "markdown"].contains(ext)
@@ -196,8 +248,8 @@ struct ActionsCard: View {
                         .interpolation((item.qrContents ?? []).isEmpty ? .high : .none)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
+                        .frame(maxHeight: state.primaryActions.isEmpty ? 330 : 230)
                         .frame(maxWidth: .infinity)
-                        .frame(height: state.primaryActions.isEmpty ? 330 : 230)
                 } else if !imageLoaded {
                     ProgressView().frame(maxWidth: .infinity).frame(height: 140)
                 } else {
@@ -245,26 +297,29 @@ struct ActionsCard: View {
     }
 
     private var footer: some View {
-        HStack(spacing: 10) {
-            Text(state.selectedAction == nil ? "↩ 使用原始内容" : "↩ 使用处理结果")
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
+        HStack(spacing: 8) {
             Spacer(minLength: 0)
-            Button { state.activate(paste: false) } label: { Text("复制").font(.system(size: 12)) }
-                .buttonStyle(.plain)
-            Button { state.activate(paste: true) } label: {
-                Text(state.selectedAction == nil ? "粘贴原内容" : "粘贴结果")
-                    .font(.system(size: 12, weight: .medium))
+            Button("复制") { state.activate(paste: false) }
+                .buttonStyle(.bordered)
+            Button(state.selectedAction == nil ? "粘贴原内容" : "粘贴结果") {
+                state.activate(paste: true)
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(Color.accentColor)
+            .buttonStyle(.borderedProminent)
         }
         .padding(.horizontal, 12)
         .frame(height: Metrics.footer)
     }
 
+    private func translationKey(for action: SmartAction) -> AppModel.TranslationKey? {
+        action.translationTarget.map { .init(id: item.id, target: $0) }
+    }
+
     private func status(for action: SmartAction) -> String {
         let model = state.model
+        if let key = translationKey(for: action) {
+            if let error = model.translationErrors[key] { return error }
+            return model.translating.contains(key) ? "正在翻译…" : "点击开始翻译；需要时系统会询问是否下载语言包。"
+        }
         switch action.kind {
         case .fileText:
             return "正在读取文件…"
@@ -272,9 +327,6 @@ struct ActionsCard: View {
             return "作为图片粘贴，在聊天和文档里直接显示，而不是作为附件。"
         case .ocr:
             return model.ocrRunning.contains(item.id) ? "正在识别图片中的文字…" : "暂无识别结果"
-        case .translate:
-            if let error = model.translationErrors[item.id] { return error }
-            return model.translating.contains(item.id) ? "正在翻译…" : "点击开始翻译；需要时系统会询问是否下载语言包。"
         default: return "暂无结果"
         }
     }
@@ -298,6 +350,14 @@ struct ActionsCard: View {
         guard !Task.isCancelled else { return }
         image = decoded.map { NSImage(cgImage: $0, size: .zero) }
         imageLoaded = true
+    }
+}
+
+private extension View {
+    @available(macOS 26.0, *)
+    func previewToolbarGlass() -> some View {
+        frame(height: 30)
+            .glassEffect(.regular.interactive(), in: Capsule())
     }
 }
 
@@ -393,7 +453,7 @@ private struct FileOriginalView: View {
                     .lineLimit(12)
                     .frame(maxWidth: .infinity, alignment: .topLeading)
                     .padding(8)
-                    .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 6))
+                    .background(Color(nsColor: .quaternarySystemFill), in: .rect(cornerRadius: 6))
                 Text("文件较大，仅预览开头；粘贴时作为文件。")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)

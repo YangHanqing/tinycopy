@@ -28,7 +28,7 @@ struct ClipItem: Codable, Identifiable, Equatable, Sendable {
     var contentType: ContentType = .plain
     /// Searchable text derived from the content (decoded JWT payload, Base64 or URL decoding).
     var derivedText: String?
-    /// The dominant natural language (NLLanguage raw value) of plain text, when it is clearly prose.
+    /// The dominant natural language (NLLanguage raw value) of copied or recognized prose.
     var language: String?
     /// Recognized text of an image; empty when recognition found nothing, nil when it has not run.
     var ocrText: String?

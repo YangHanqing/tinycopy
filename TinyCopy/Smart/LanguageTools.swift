@@ -36,7 +36,8 @@ enum LanguageTools {
     /// Code, data and short fragments return nil, so they are never offered for translation.
     static func proseLanguage(of text: String) -> String? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.count >= 2, trimmed.utf16.count <= 20_000 else { return nil }
+        guard trimmed.count >= 2, trimmed.utf16.count <= 20_000,
+              !Transforms.isWebURL(trimmed) else { return nil }
         let sample = String(trimmed.prefix(1500))
         var letters = 0, symbols = 0, total = 0
         for scalar in sample.unicodeScalars where !CharacterSet.whitespacesAndNewlines.contains(scalar) {
