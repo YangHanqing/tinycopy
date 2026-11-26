@@ -220,21 +220,24 @@ final class PanelController: NSObject, NSWindowDelegate {
     /// Returns true when the key was handled. Keys go to the input method while it is composing
     /// (pinyin and other marked text), so its candidate list keeps working.
     private func handle(_ event: NSEvent) -> Bool {
-        if let editor = panel.firstResponder as? NSTextView, editor.hasMarkedText() { return false }
+        let editor = panel.firstResponder as? NSTextView
+        if editor?.hasMarkedText() == true { return false }
         let flags = event.modifierFlags.intersection([.command, .shift, .option, .control])
         switch Int(event.keyCode) {
-        case kVK_DownArrow: state.move(1)
-        case kVK_UpArrow: state.move(-1)
+        case kVK_DownArrow: state.moveSelection(1)
+        case kVK_UpArrow: state.moveSelection(-1)
         case kVK_PageDown: state.move(7)
         case kVK_PageUp: state.move(-7)
         case kVK_Return, kVK_ANSI_KeypadEnter: state.activate(paste: !flags.contains(.command))
         case kVK_Escape: state.escape()
         case kVK_Tab where flags.isEmpty || flags == .shift:
             state.movePreview(flags == .shift ? -1 : 1)
-        case kVK_RightArrow where flags.isEmpty && (state.navigationActive || state.query.isEmpty):
-            state.movePreview(1)
-        case kVK_LeftArrow where flags.isEmpty && (state.navigationActive || state.query.isEmpty):
-            state.movePreview(-1)
+        case kVK_RightArrow where flags.isEmpty:
+            if !state.navigationActive, let editor,
+               editor.selectedRange() != NSRange(location: editor.string.utf16.count, length: 0) { return false }
+            state.focusPreview()
+        case kVK_LeftArrow where flags.isEmpty && state.previewFocused:
+            state.focusHistory()
         case kVK_ANSI_P where flags == .command: state.togglePinSelected()
         case kVK_Delete where flags == .command: state.deleteSelected()
         case kVK_ANSI_W where flags == .command: hide()

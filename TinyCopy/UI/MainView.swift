@@ -133,8 +133,8 @@ struct MainView: View {
 
     private var footer: some View {
         HStack(spacing: 10) {
-            hint("↑↓", "选记录")
-            hint("←→", "选处理")
+            hint("↑↓", state.previewFocused ? "选处理" : "选记录")
+            hint(state.previewFocused ? "←" : "→", state.previewFocused ? "返回记录" : "进入预览")
             hint("↩", "粘贴")
             hint("esc", state.previewVisible ? "收起" : "关闭")
             Spacer(minLength: 0)
@@ -191,7 +191,7 @@ struct HistoryList: View {
                     ScrollView {
                         LazyVStack(spacing: 2) {
                             ForEach(results) { item in
-                                HistoryRow(item: item, selected: item.id == selectedID, context: context,
+                                HistoryRow(item: item, selected: item.id == selectedID, focused: !state.previewFocused, context: context,
                                            now: state.now, model: state.model)
                                     .id(item.id)
                                     .onTapGesture(count: 2) {
@@ -245,6 +245,7 @@ struct HistoryList: View {
 struct HistoryRow: View {
     let item: ClipItem
     let selected: Bool
+    let focused: Bool
     let context: SmartContext
     let now: Date
     let model: AppModel
@@ -277,7 +278,7 @@ struct HistoryRow: View {
         .frame(height: Metrics.historyRow)
         .background(rowFill, in: .rect(cornerRadius: 8))
         .overlay {
-            if selected && contrast == .increased {
+            if selected && focused && contrast == .increased {
                 RoundedRectangle(cornerRadius: 8)
                     .strokeBorder(Color(nsColor: .selectedContentBackgroundColor), lineWidth: 1)
                     .allowsHitTesting(false)
@@ -290,6 +291,7 @@ struct HistoryRow: View {
 
     private var rowFill: Color {
         if selected {
+            guard focused else { return Color(nsColor: .secondarySystemFill) }
             return Color(nsColor: .selectedContentBackgroundColor).opacity(contrast == .increased ? 0.32 : 0.18)
         }
         return hovering ? Color(nsColor: .quaternarySystemFill) : .clear

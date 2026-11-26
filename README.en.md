@@ -4,7 +4,7 @@
 
 TinyCopy is a **native macOS clipboard history tool**. It keeps the text, rich text, images and files you copy, finds them again with one shortcut, and pastes them back into the app you were in.
 
-Press `⇧⌘V` to open it and type to search. Up and Down pick a record, Left and Right pick the original or a converted version, and Return pastes. A copied file or folder can be pasted as its path; JSON, encoded text, foreign languages and the text in screenshots can be converted before you paste.
+Press `⇧⌘V` to open it and type to search. Use Up and Down to pick a record. Press Right to enter the preview, then use Up and Down to choose the original or a converted version. Press Left to return to history or Return to paste. A copied file or folder can be pasted as its path; JSON, encoded text, foreign languages and the text in screenshots can be converted before you paste.
 
 For a quick look, see the [introduction page](https://yanghanqing.github.io/tinycopy/?lang=en), with screenshots of the main features.
 
@@ -29,7 +29,8 @@ The screenshots use sample content. The interface is in Chinese for now.
 | Action | Keys |
 | --- | --- |
 | Open / close | `⇧⌘V` (change it in Settings) |
-| Pick a record / a version | `↑` `↓` / `←` `→` |
+| Pick a record or a version in the active pane | `↑` `↓` |
+| Enter the preview / return to history | `→` / `←` |
 | Paste | `↩`, or double-click a record to paste the original |
 | Copy without pasting | `⌘↩` |
 | Favorite | `⌘P` |

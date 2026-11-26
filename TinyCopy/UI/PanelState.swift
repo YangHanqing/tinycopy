@@ -22,7 +22,7 @@ enum HistoryFilter: String, CaseIterable, Identifiable {
     }
 }
 
-/// Vertical navigation chooses history; horizontal navigation chooses how to use that item.
+/// Up and Down follow the active column. Right enters the preview and Left returns to history.
 @MainActor
 @Observable
 final class PanelState {
@@ -32,26 +32,21 @@ final class PanelState {
         didSet {
             guard query != oldValue else { return }
             selectedID = nil
-            previewChoice = .original
-            navigationActive = false
+            editSearch()
         }
     }
     var filter: HistoryFilter = .all {
         didSet {
             guard filter != oldValue else { return }
             selectedID = nil
-            previewChoice = .original
-            waiting = nil
-            navigationActive = false
+            editSearch()
         }
     }
     var favoritesOnly = false {
         didSet {
             guard favoritesOnly != oldValue else { return }
             selectedID = nil
-            previewChoice = .original
-            waiting = nil
-            navigationActive = false
+            editSearch()
         }
     }
     /// nil means the first result.
@@ -76,6 +71,7 @@ final class PanelState {
     }
     @ObservationIgnored var navigationActive = false
     @ObservationIgnored var onPreviewVisibilityChanged: (() -> Void)?
+    private(set) var previewFocused = false
     /// Original content is always the starting point for a newly selected record.
     enum PreviewChoice: Hashable { case original, action(SmartActionKind) }
     var previewChoice: PreviewChoice = .original {
@@ -294,30 +290,41 @@ final class PanelState {
         // Pin the current record before starting work; new captures must not change its identity.
         selectedID = item.id
         navigationActive = true
+        previewFocused = true
         previewVisible = true
         if previewChoice != choice { waiting = nil }
         previewChoice = choice
         startPendingWork(force: interactive)
     }
 
-    /// Left/right (and Tab) have one meaning, regardless of which pane was last clicked.
+    func focusPreview() {
+        guard !previewFocused else { return }
+        choosePreview(.original)
+    }
+
+    func focusHistory() {
+        previewFocused = false
+        waiting = nil
+        previewChoice = .original
+    }
+
     func movePreview(_ delta: Int) {
         guard selected != nil else { return }
-        let choices = previewChoices
-        let current = choices.firstIndex(of: currentPreview) ?? 0
+        var choices = previewChoices
+        let currentChoice = currentPreview
+        if !choices.contains(currentChoice) { choices.append(currentChoice) }
+        let current = choices.firstIndex(of: currentChoice) ?? 0
         choosePreview(choices[min(max(current + delta, 0), choices.count - 1)])
     }
 
     func collapsePreview() {
-        waiting = nil
-        previewChoice = .original
+        focusHistory()
         previewVisible = false
     }
 
     func editSearch() {
+        focusHistory()
         navigationActive = false
-        previewChoice = .original
-        waiting = nil
     }
 
     /// Results are visible alongside the source, so prepare them even while the source is selected.
@@ -346,11 +353,9 @@ final class PanelState {
         filter = .all
         favoritesOnly = false
         selectedID = nil
-        previewChoice = .original
+        editSearch()
         temporaryTranslation = nil
-        navigationActive = false
         previewVisible = false
-        waiting = nil
         // Files may have changed while the panel was closed.
         filePreviewTask?.task.cancel()
         filePreviewTask = nil
@@ -372,6 +377,10 @@ final class PanelState {
 
     // MARK: Keyboard
 
+    func moveSelection(_ delta: Int) {
+        if previewFocused { movePreview(delta) } else { move(delta) }
+    }
+
     func move(_ delta: Int) {
         let results = results
         guard !results.isEmpty else { return }
@@ -382,8 +391,7 @@ final class PanelState {
     func select(_ id: UUID) {
         selectedID = id
         // Reset even when Up/Down hits the list boundary or the same row is clicked again.
-        waiting = nil
-        previewChoice = .original
+        focusHistory()
         navigationActive = true
         previewVisible = true
     }
@@ -434,8 +442,7 @@ final class PanelState {
         model.togglePin(item.id)
         if model.item(item.id) == nil || (favoritesOnly && model.item(item.id)?.pinned != true) {
             selectedID = nil
-            previewChoice = .original
-            waiting = nil
+            focusHistory()
         }
     }
 
@@ -445,8 +452,7 @@ final class PanelState {
         if let index = results.firstIndex(where: { $0.id == item.id }) {
             selectedID = results.indices.contains(index + 1) ? results[index + 1].id : (index > 0 ? results[index - 1].id : nil)
         }
-        waiting = nil
-        previewChoice = .original
+        focusHistory()
         model.delete(item.id)
         if selected == nil { collapsePreview() }
     }

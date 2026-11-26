@@ -172,15 +172,22 @@ struct ActionsCard: View {
                 .padding(.bottom, 12)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(selected ? selectionFill : Color.clear, in: .rect(cornerRadius: 9))
+        .background(selected ? cardSelectionFill : Color.clear, in: .rect(cornerRadius: 9))
         .overlay {
             if selected && contrast == .increased {
                 RoundedRectangle(cornerRadius: 9)
-                    .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1)
+                    .strokeBorder(Color(nsColor: state.previewFocused ? .selectedContentBackgroundColor : .separatorColor), lineWidth: 1)
                     .allowsHitTesting(false)
             }
         }
         .id(choice)
+    }
+
+    private var cardSelectionFill: Color {
+        if state.previewFocused {
+            return Color(nsColor: .selectedContentBackgroundColor).opacity(contrast == .increased ? 0.32 : 0.18)
+        }
+        return selectionFill
     }
 
     private func resultCard(_ action: SmartAction) -> some View {
